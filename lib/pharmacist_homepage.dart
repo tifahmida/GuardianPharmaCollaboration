@@ -7,13 +7,25 @@ import 'package:guardianpharma/scan_barcode_page.dart';
 import 'package:guardianpharma/add_medicine_page.dart';
 import 'package:guardianpharma/transaction_history_page.dart';
 import 'package:guardianpharma/inventory_and_medicine_lookup_page.dart';
-import 'package:guardianpharma/substitute_finder_page.dart';
 import 'package:guardianpharma/expiry_alerts_page.dart';
 import 'package:guardianpharma/fefo_system_page.dart';
 import 'package:guardianpharma/lethal_dose_protection_page.dart';
+import 'package:guardianpharma/substitute_finder_page.dart';
+import 'package:guardianpharma/pharmacy_wrapper_page.dart';
 
 class PharmacistHome extends StatelessWidget {
   const PharmacistHome({super.key});
+
+  void _logout(BuildContext context) async {
+    PharmacySession.clear();
+    await Supabase.instance.client.auth.signOut();
+    if (!context.mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const MyLogin()),
+      (route) => false,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +57,6 @@ class PharmacistHome extends StatelessWidget {
                         context,
                         "Sell Medicine",
                         Icons.point_of_sale,
-                        subtitle: "Strip, box or carton sales",
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -57,7 +68,6 @@ class PharmacistHome extends StatelessWidget {
                         context,
                         "Scan Barcode",
                         Icons.qr_code_scanner,
-                        subtitle: "Scan medicine barcode",
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -69,7 +79,6 @@ class PharmacistHome extends StatelessWidget {
                         context,
                         "Transaction History",
                         Icons.receipt_long,
-                        subtitle: "View all sales records",
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -85,7 +94,6 @@ class PharmacistHome extends StatelessWidget {
                         context,
                         "Inventory & Medicine Lookup",
                         Icons.inventory,
-                        subtitle: "View & search stock",
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -97,7 +105,6 @@ class PharmacistHome extends StatelessWidget {
                         context,
                         "Add Medicine",
                         Icons.add_box,
-                        subtitle: "Add new medicine to stock",
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -109,7 +116,6 @@ class PharmacistHome extends StatelessWidget {
                         context,
                         "Carton Tracking",
                         Icons.widgets,
-                        subtitle: "Manage manufacturers & boxes",
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -125,7 +131,6 @@ class PharmacistHome extends StatelessWidget {
                         context,
                         "Expiry Alerts",
                         Icons.warning_amber,
-                        subtitle: "Check expired & expiring medicines",
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -137,7 +142,6 @@ class PharmacistHome extends StatelessWidget {
                         context,
                         "FEFO System",
                         Icons.autorenew,
-                        subtitle: "First expiry first out tracking",
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -149,7 +153,6 @@ class PharmacistHome extends StatelessWidget {
                         context,
                         "Lethal Dose Protection",
                         Icons.health_and_safety,
-                        subtitle: "OTP verified overdose protection",
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -164,8 +167,7 @@ class PharmacistHome extends StatelessWidget {
                       _tile(
                         context,
                         "Substitute Finder",
-                        Icons.find_replace,
-                        subtitle: "Find generic substitutes",
+                        Icons.search,
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -186,6 +188,9 @@ class PharmacistHome extends StatelessWidget {
     );
   }
 
+  // =========================
+  // TOP BAR
+  // =========================
   Widget _topBar(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -208,23 +213,22 @@ class PharmacistHome extends StatelessWidget {
           ),
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
-            onPressed: () async {
-              await Supabase.instance.client.auth.signOut();
-              if (context.mounted) {
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (_) => const MyLogin()),
-                  (route) => false,
-                );
-              }
-            },
+            tooltip: "Logout",
+            onPressed: () => _logout(context),
           ),
         ],
       ),
     );
   }
 
+  // =========================
+  // HEADER BOX
+  // ✅ Switch Pharmacy removed
+  // =========================
   Widget _headerBox() {
+    final String pharmacyName =
+        PharmacySession.pharmacyName ?? "GuardianPharma";
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
       decoration: BoxDecoration(
@@ -235,25 +239,58 @@ class PharmacistHome extends StatelessWidget {
           BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10),
         ],
       ),
-      child: const Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Column(
         children: [
-          Icon(Icons.medical_services, color: Colors.greenAccent),
-          SizedBox(width: 10),
-          Text(
-            "PHARMACIST DASHBOARD",
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.2,
-            ),
+          // PHARMACY NAME
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.local_pharmacy,
+                color: Colors.blueAccent,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  pharmacyName,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.blueAccent,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // DASHBOARD TITLE
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.medical_services, color: Colors.greenAccent),
+              SizedBox(width: 10),
+              Text(
+                "PHARMACIST DASHBOARD",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
+  // =========================
+  // SECTION TITLE
+  // =========================
   Widget _section(String title) {
     return Padding(
       padding: const EdgeInsets.only(top: 12, bottom: 8),
@@ -268,43 +305,24 @@ class PharmacistHome extends StatelessWidget {
     );
   }
 
+  // =========================
+  // TILE
+  // =========================
   Widget _tile(
     BuildContext context,
     String title,
     IconData icon, {
-    String? subtitle,
     VoidCallback? onTap,
   }) {
     return Card(
       color: Colors.white.withOpacity(0.12),
-      margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(icon, color: Colors.white, size: 22),
-        ),
-        title: Text(
-          title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-            fontSize: 14,
-          ),
-        ),
-        subtitle: subtitle != null
-            ? Text(
-                subtitle,
-                style: const TextStyle(color: Colors.white54, fontSize: 12),
-              )
-            : null,
-        trailing: Icon(
-          onTap != null ? Icons.arrow_forward_ios : Icons.lock_outline,
+        leading: Icon(icon, color: Colors.white),
+        title: Text(title, style: const TextStyle(color: Colors.white)),
+        trailing: const Icon(
+          Icons.arrow_forward_ios,
           size: 14,
-          color: onTap != null ? Colors.white70 : Colors.white24,
+          color: Colors.white,
         ),
         onTap: onTap,
       ),

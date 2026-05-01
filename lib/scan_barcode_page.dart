@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:guardianpharma/pharmacy_wrapper_page.dart';
 
 class ScanBarcodePage extends StatefulWidget {
   const ScanBarcodePage({super.key});
@@ -13,15 +14,12 @@ class _ScanBarcodePageState extends State<ScanBarcodePage>
   final supabase = Supabase.instance.client;
   late TabController _tabController;
 
-  // Shared
   String scannedCode = '';
   bool scanning = false;
   bool searched = false;
 
-  // Sell mode
   Map<String, dynamic>? foundMedicine;
 
-  // Add mode
   List<Map<String, dynamic>> manufacturers = [];
   String? selectedManufacturerId;
   String? selectedCartonId;
@@ -37,7 +35,6 @@ class _ScanBarcodePageState extends State<ScanBarcodePage>
     'Custom',
   ];
 
-  // Add mode controllers
   final medicineNameController = TextEditingController();
   final genericNameController = TextEditingController();
   final batchController = TextEditingController();
@@ -81,15 +78,8 @@ class _ScanBarcodePageState extends State<ScanBarcodePage>
     }
   }
 
-  // =========================
-  // ✅ WEB-FRIENDLY BARCODE SCANNER
-  // Shows manual input dialog
-  // On mobile → explain it uses camera
-  // On web → manual input
-  // =========================
   Future<String?> _scanBarcode() async {
     final manualController = TextEditingController();
-
     final result = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
@@ -149,34 +139,31 @@ class _ScanBarcodePageState extends State<ScanBarcodePage>
     return result;
   }
 
-  // =========================
-  // SELL MODE — SCAN & SEARCH
-  // =========================
+  // ✅ Search scoped to current pharmacy
   Future<void> _scanAndSell() async {
     setState(() => scanning = true);
-
     final barcode = await _scanBarcode();
     if (barcode == null || barcode.isEmpty) {
       setState(() => scanning = false);
       return;
     }
-
     setState(() {
       scannedCode = barcode;
       searched = false;
       foundMedicine = null;
     });
-
     await _searchMedicine(barcode);
     setState(() => scanning = false);
   }
 
+  // ✅ Scoped to current pharmacy
   Future<void> _searchMedicine(String query) async {
     setState(() => scanning = true);
     try {
       final res = await supabase
           .from('medicine_boxes')
           .select('*, cartons(*, manufacturers(name, country))')
+          .eq('pharmacy_id', PharmacySession.pharmacyId ?? '')
           .or('batch_number.eq.$query,medicine_name.ilike.%$query%')
           .gt('quantity', 0)
           .maybeSingle();
@@ -195,30 +182,21 @@ class _ScanBarcodePageState extends State<ScanBarcodePage>
     }
   }
 
-  // =========================
-  // ADD MODE — SCAN & AUTOFILL
-  // =========================
   Future<void> _scanAndFill() async {
     setState(() => scanning = true);
-
     final barcode = await _scanBarcode();
     if (barcode == null || barcode.isEmpty) {
       setState(() => scanning = false);
       return;
     }
-
     setState(() {
       batchController.text = barcode;
       scannedCode = barcode;
       scanning = false;
     });
-
     _success("Barcode scanned! Batch number filled ✅");
   }
 
-  // =========================
-  // SELL DIALOG
-  // =========================
   void _showSellDialog(Map<String, dynamic> medicine) {
     String saleType = 'strip';
     final qtyController = TextEditingController(text: '1');
@@ -478,6 +456,7 @@ class _ScanBarcodePageState extends State<ScanBarcodePage>
     );
   }
 
+  // ✅ Sale saved with pharmacy_id
   Future<void> _completeSale({
     required Map<String, dynamic> medicine,
     required String saleType,
@@ -502,6 +481,7 @@ class _ScanBarcodePageState extends State<ScanBarcodePage>
         'total_amount': total,
         'customer_name': customer.isEmpty ? null : customer,
         'sold_by': supabase.auth.currentUser!.id,
+        'pharmacy_id': PharmacySession.pharmacyId, // ✅ scoped
       });
 
       final int currentQty = (medicine['quantity'] as int?) ?? 0;
@@ -521,7 +501,6 @@ class _ScanBarcodePageState extends State<ScanBarcodePage>
           .eq('id', medicine['id']);
 
       _success("✅ Sale completed!");
-
       setState(() {
         foundMedicine?['quantity'] = newQty;
       });
@@ -530,9 +509,7 @@ class _ScanBarcodePageState extends State<ScanBarcodePage>
     }
   }
 
-  // =========================
-  // SAVE MEDICINE BOX
-  // =========================
+  // ✅ Medicine insert scoped to pharmacy
   Future<void> _saveMedicineBox() async {
     final name = medicineNameController.text.trim();
     final generic = genericNameController.text.trim();
@@ -570,6 +547,10 @@ class _ScanBarcodePageState extends State<ScanBarcodePage>
       _error("Please enter custom unit");
       return;
     }
+    if (!PharmacySession.isLoaded) {
+      _error("Pharmacy session not loaded. Please restart the app.");
+      return;
+    }
 
     try {
       await supabase.from('medicine_boxes').insert({
@@ -584,11 +565,11 @@ class _ScanBarcodePageState extends State<ScanBarcodePage>
         'price': price,
         'price_per_strip': pricePerStrip,
         'created_by': supabase.auth.currentUser!.id,
+        'pharmacy_id': PharmacySession.pharmacyId, // ✅ scoped
       });
 
       _success("✅ Medicine box added successfully!");
 
-      // Clear form
       medicineNameController.clear();
       genericNameController.clear();
       batchController.clear();
@@ -724,7 +705,6 @@ class _ScanBarcodePageState extends State<ScanBarcodePage>
           SafeArea(
             child: Column(
               children: [
-                // TOP BAR
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(
@@ -735,19 +715,32 @@ class _ScanBarcodePageState extends State<ScanBarcodePage>
                       ),
                       const Icon(Icons.qr_code_scanner, color: Colors.white),
                       const SizedBox(width: 10),
-                      const Text(
-                        "Scan Barcode",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "Scan Barcode",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              PharmacySession.pharmacyName ?? 'Your Pharmacy',
+                              style: const TextStyle(
+                                color: Colors.white54,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
 
-                // TAB BAR
                 Container(
                   margin: const EdgeInsets.symmetric(horizontal: 16),
                   decoration: BoxDecoration(
@@ -775,14 +768,11 @@ class _ScanBarcodePageState extends State<ScanBarcodePage>
                   child: TabBarView(
                     controller: _tabController,
                     children: [
-                      // =========================
-                      // TAB 1 — SELL MODE
-                      // =========================
+                      // ── TAB 1: SELL ──────────────────
                       SingleChildScrollView(
                         padding: const EdgeInsets.all(16),
                         child: Column(
                           children: [
-                            // Scan button
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton.icon(
@@ -821,10 +811,7 @@ class _ScanBarcodePageState extends State<ScanBarcodePage>
                                 ),
                               ),
                             ),
-
                             const SizedBox(height: 12),
-
-                            // Manual search
                             TextField(
                               style: const TextStyle(color: Colors.white),
                               onSubmitted: (val) => _searchMedicine(val.trim()),
@@ -846,10 +833,7 @@ class _ScanBarcodePageState extends State<ScanBarcodePage>
                                 ),
                               ),
                             ),
-
                             const SizedBox(height: 16),
-
-                            // Result
                             if (searched) ...[
                               if (foundMedicine == null)
                                 Container(
@@ -868,7 +852,7 @@ class _ScanBarcodePageState extends State<ScanBarcodePage>
                                       SizedBox(width: 10),
                                       Expanded(
                                         child: Text(
-                                          "❌ No medicine found!\nCheck the batch number or name.",
+                                          "❌ No medicine found in this pharmacy!\nCheck the batch number or name.",
                                           style: TextStyle(
                                             color: Colors.redAccent,
                                             fontWeight: FontWeight.bold,
@@ -963,14 +947,41 @@ class _ScanBarcodePageState extends State<ScanBarcodePage>
                         ),
                       ),
 
-                      // =========================
-                      // TAB 2 — ADD MODE
-                      // =========================
+                      // ── TAB 2: ADD ───────────────────
                       SingleChildScrollView(
                         padding: const EdgeInsets.all(16),
                         child: Column(
                           children: [
-                            // Scan to autofill batch
+                            // Pharmacy badge
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.blueAccent.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: Colors.blueAccent.withOpacity(0.3),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.local_pharmacy,
+                                    color: Colors.blueAccent,
+                                    size: 14,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    "Adding to: ${PharmacySession.pharmacyName ?? 'Your Pharmacy'}",
+                                    style: const TextStyle(
+                                      color: Colors.white60,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton.icon(
@@ -997,10 +1008,8 @@ class _ScanBarcodePageState extends State<ScanBarcodePage>
                                 ),
                               ),
                             ),
-
                             const SizedBox(height: 16),
 
-                            // Manufacturer dropdown
                             DropdownButtonFormField<String>(
                               value: selectedManufacturerId,
                               dropdownColor: const Color(0xFF1E1E2E),
@@ -1063,7 +1072,6 @@ class _ScanBarcodePageState extends State<ScanBarcodePage>
                             ),
                             const SizedBox(height: 12),
 
-                            // Expiry date picker
                             TextField(
                               controller: expiryController,
                               style: const TextStyle(color: Colors.white),
@@ -1115,7 +1123,6 @@ class _ScanBarcodePageState extends State<ScanBarcodePage>
                             ),
                             const SizedBox(height: 12),
 
-                            // Unit dropdown
                             StatefulBuilder(
                               builder: (context, setLocalState) => Column(
                                 children: [
@@ -1189,7 +1196,6 @@ class _ScanBarcodePageState extends State<ScanBarcodePage>
                             ),
                             const SizedBox(height: 20),
 
-                            // Save button
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton.icon(

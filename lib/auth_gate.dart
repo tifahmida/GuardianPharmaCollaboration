@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'login_page.dart';
 import 'pharmacist_homepage.dart';
 import 'regulatoryauthority_homepage.dart';
+import 'pharmacy_wrapper_page.dart';
 
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
@@ -23,14 +24,10 @@ class _AuthGateState extends State<AuthGate> {
 
   Future<String?> _getRole() async {
     final client = Supabase.instance.client;
-
-    // ✅ FIX 1: Wait for a stable session instead of trusting currentUser immediately
     final session = client.auth.currentSession;
     if (session == null) return null;
+    final userId = session.user.id;
 
-    final userId = session.user.id; // ✅ Read from session, not currentUser
-
-    // ✅ FIX 2: Retry up to 5 times with delay (handles trigger propagation lag)
     for (int attempt = 0; attempt < 5; attempt++) {
       try {
         final res = await client
@@ -38,27 +35,18 @@ class _AuthGateState extends State<AuthGate> {
             .select('role')
             .eq('id', userId)
             .maybeSingle();
-
         final role = res?['role'] as String?;
-
-        if (role != null && role.isNotEmpty) {
-          return role; // ✅ Got it, return immediately
-        }
+        if (role != null && role.isNotEmpty) return role;
       } catch (e) {
         debugPrint("AuthGate attempt $attempt error: $e");
       }
-
-      // Wait before retrying (gives Supabase trigger time to insert profile)
       await Future.delayed(const Duration(milliseconds: 500));
     }
-
-    debugPrint("AuthGate: role still null after retries");
     return null;
   }
 
   @override
   Widget build(BuildContext context) {
-    // ✅ FIX 3: Check session from session object, not just currentUser
     final session = Supabase.instance.client.auth.currentSession;
     if (session == null) return const MyLogin();
 
@@ -130,8 +118,14 @@ class _AuthGateState extends State<AuthGate> {
         final role = snapshot.data!;
         debugPrint("✅ AuthGate resolved role: $role");
 
-        if (role == "regulatory") return const RegulatoryHome();
-        return const PharmacistHome();
+        // ✅ Regulatory goes directly — no pharmacy needed
+        if (role == "regulatory") {
+          return const RegulatoryHome();
+        }
+
+        // ✅ Pharmacist goes through PharmacyWrapperPage FIRST
+        // then to dashboard
+        return PharmacyWrapperPage(child: const PharmacistHome());
       },
     );
   }

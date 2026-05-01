@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:guardianpharma/pharmacy_wrapper_page.dart';
 
 class TransactionHistoryPage extends StatefulWidget {
   const TransactionHistoryPage({super.key});
@@ -29,17 +30,11 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
     _loadSales();
   }
 
-  // =========================
-  // CONVERT UTC → BD TIME
-  // =========================
   DateTime _toBDTime(String isoString) {
     final utc = DateTime.parse(isoString).toUtc();
     return utc.add(const Duration(hours: 6));
   }
 
-  // =========================
-  // FORMAT TIME WITH AM/PM
-  // =========================
   String _formatTime(String isoString) {
     final dt = _toBDTime(isoString);
     final int hour = dt.hour;
@@ -54,9 +49,6 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
         "${minute.toString().padLeft(2, '0')} $period";
   }
 
-  // =========================
-  // FORMAT DATE
-  // =========================
   String _formatDate(String isoString) {
     final dt = _toBDTime(isoString);
     return "${dt.day.toString().padLeft(2, '0')}/"
@@ -66,6 +58,7 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
 
   // =========================
   // LOAD SALES
+  // ✅ filtered by pharmacy_id
   // =========================
   Future<void> _loadSales() async {
     setState(() => loading = true);
@@ -76,12 +69,15 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
       final weekStart = todayStart.subtract(Duration(days: now.weekday - 1));
       final monthStart = DateTime.utc(now.year, now.month, 1);
 
+      final String pharmacyId = PharmacySession.pharmacyId ?? '';
+
       List<Map<String, dynamic>> res = [];
 
       if (selectedFilter == 'Today') {
         final result = await supabase
             .from('sales')
             .select('*, profiles(full_name)')
+            .eq('pharmacy_id', pharmacyId)
             .gte('created_at', todayStart.toIso8601String())
             .order('created_at', ascending: false);
         res = List<Map<String, dynamic>>.from(result);
@@ -89,6 +85,7 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
         final result = await supabase
             .from('sales')
             .select('*, profiles(full_name)')
+            .eq('pharmacy_id', pharmacyId)
             .gte('created_at', weekStart.toIso8601String())
             .order('created_at', ascending: false);
         res = List<Map<String, dynamic>>.from(result);
@@ -96,6 +93,7 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
         final result = await supabase
             .from('sales')
             .select('*, profiles(full_name)')
+            .eq('pharmacy_id', pharmacyId)
             .gte('created_at', monthStart.toIso8601String())
             .order('created_at', ascending: false);
         res = List<Map<String, dynamic>>.from(result);
@@ -103,6 +101,7 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
         final result = await supabase
             .from('sales')
             .select('*, profiles(full_name)')
+            .eq('pharmacy_id', pharmacyId)
             .order('created_at', ascending: false);
         res = List<Map<String, dynamic>>.from(result);
       }
@@ -184,7 +183,6 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
   void _showSaleDetail(Map<String, dynamic> sale) {
     final String dateStr = _formatDate(sale['created_at']);
     final String timeStr = _formatTime(sale['created_at']);
-
     final String soldBy =
         sale['profiles']?['full_name']?.toString() ?? 'Unknown';
     final String customer = sale['customer_name']?.toString() ?? '';
@@ -223,7 +221,7 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
               ),
               const SizedBox(height: 6),
 
-              // DATE + TIME with AM/PM
+              // DATE + TIME
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -395,7 +393,7 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
           SafeArea(
             child: Column(
               children: [
-                // ── TOP BAR ──────────────────────────
+                // TOP BAR
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(
@@ -424,7 +422,7 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
                   ),
                 ),
 
-                // ── FILTER CHIPS ──────────────────────
+                // FILTER CHIPS
                 SizedBox(
                   height: 40,
                   child: ListView.builder(
@@ -474,7 +472,7 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
 
                 const SizedBox(height: 12),
 
-                // ── SUMMARY CARDS ─────────────────────
+                // SUMMARY CARDS
                 if (!loading) ...[
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -546,7 +544,7 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
                   const SizedBox(height: 12),
                 ],
 
-                // ── SALES LIST ────────────────────────
+                // SALES LIST
                 Expanded(
                   child: loading
                       ? const Center(
@@ -590,7 +588,6 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
                                 sale['profiles']?['full_name']?.toString() ??
                                 'Unknown';
 
-                            // ✅ KEY FIX — GestureDetector wraps the whole card
                             return GestureDetector(
                               onTap: () => _showSaleDetail(sale),
                               child: Card(
@@ -600,7 +597,6 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
                                   padding: const EdgeInsets.all(12),
                                   child: Row(
                                     children: [
-                                      // Icon
                                       CircleAvatar(
                                         backgroundColor: _saleColor(
                                           type,
@@ -612,8 +608,6 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
                                         ),
                                       ),
                                       const SizedBox(width: 12),
-
-                                      // Content
                                       Expanded(
                                         child: Column(
                                           crossAxisAlignment:
@@ -694,8 +688,6 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
                                           ],
                                         ),
                                       ),
-
-                                      // Amount
                                       Column(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.end,

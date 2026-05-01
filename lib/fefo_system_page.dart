@@ -1,5 +1,9 @@
+// ============================================================
+// fefo_system_page.dart  –  pharmacy-scoped
+// ============================================================
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:guardianpharma/pharmacy_wrapper_page.dart';
 
 class FefoSystemPage extends StatefulWidget {
   const FefoSystemPage({super.key});
@@ -31,17 +35,14 @@ class _FefoSystemPageState extends State<FefoSystemPage> {
     super.dispose();
   }
 
-  // =========================
-  // LOAD FEFO DATA
-  // ordered by expiry_date ascending
-  // so earliest expiry comes first
-  // =========================
+  // ✅ Scoped to current pharmacy
   Future<void> _loadFefoData() async {
     setState(() => loading = true);
     try {
       final res = await supabase
           .from('medicine_boxes')
           .select('*, cartons(*, manufacturers(name))')
+          .eq('pharmacy_id', PharmacySession.pharmacyId ?? '')
           .gt('quantity', 0)
           .order('expiry_date', ascending: true);
 
@@ -55,9 +56,6 @@ class _FefoSystemPageState extends State<FefoSystemPage> {
     }
   }
 
-  // =========================
-  // FILTERED LIST
-  // =========================
   List<Map<String, dynamic>> get filteredMedicines {
     if (searchQuery.isEmpty) return fefoMedicines;
     return fefoMedicines.where((m) {
@@ -74,9 +72,6 @@ class _FefoSystemPageState extends State<FefoSystemPage> {
     }).toList();
   }
 
-  // =========================
-  // GET STATUS
-  // =========================
   Map<String, dynamic> _getStatus(String expiryStr) {
     final DateTime? expiry = DateTime.tryParse(expiryStr);
     if (expiry == null) {
@@ -88,9 +83,7 @@ class _FefoSystemPageState extends State<FefoSystemPage> {
         'daysLeft': 0,
       };
     }
-
     final int daysLeft = expiry.difference(DateTime.now()).inDays;
-
     if (daysLeft < 0) {
       return {
         'label': 'EXPIRED',
@@ -134,9 +127,6 @@ class _FefoSystemPageState extends State<FefoSystemPage> {
     }
   }
 
-  // =========================
-  // FEFO DETAIL BOTTOM SHEET
-  // =========================
   void _showFefoDetail(
     Map<String, dynamic> medicine,
     Map<String, dynamic> status,
@@ -172,7 +162,6 @@ class _FefoSystemPageState extends State<FefoSystemPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
               Row(
                 children: [
                   CircleAvatar(
@@ -210,10 +199,7 @@ class _FefoSystemPageState extends State<FefoSystemPage> {
                   ),
                 ],
               ),
-
               const SizedBox(height: 16),
-
-              // FEFO Priority box
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
@@ -252,20 +238,15 @@ class _FefoSystemPageState extends State<FefoSystemPage> {
                   ],
                 ),
               ),
-
               const SizedBox(height: 16),
               const Divider(color: Colors.white24),
-
               _detailRow("🏭 Manufacturer", manufacturer),
               _detailRow("🔢 Batch Number", batch),
               _detailRow("📦 Quantity", "$qty $unit"),
               _detailRow("💊 Strips per Box", "$stripsPerBox"),
               _detailRow("💰 Price per Box", "BDT ${price.toStringAsFixed(2)}"),
               _detailRow("📅 Expiry Date", expiry),
-
               const SizedBox(height: 16),
-
-              // FEFO Instruction box
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -292,9 +273,7 @@ class _FefoSystemPageState extends State<FefoSystemPage> {
                   ],
                 ),
               ),
-
               const SizedBox(height: 20),
-
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -354,9 +333,6 @@ class _FefoSystemPageState extends State<FefoSystemPage> {
     context,
   ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
 
-  // =========================
-  // BUILD
-  // =========================
   @override
   Widget build(BuildContext context) {
     final List<Map<String, dynamic>> medicines = filteredMedicines;
@@ -373,11 +349,9 @@ class _FefoSystemPageState extends State<FefoSystemPage> {
           Positioned.fill(
             child: Container(color: Colors.black.withOpacity(0.45)),
           ),
-
           SafeArea(
             child: Column(
               children: [
-                // ── TOP BAR ──────────────────────────
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(
@@ -406,7 +380,7 @@ class _FefoSystemPageState extends State<FefoSystemPage> {
                   ),
                 ),
 
-                // ── INFO BOX ─────────────────────────
+                // Pharmacy + info
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Container(
@@ -418,18 +392,18 @@ class _FefoSystemPageState extends State<FefoSystemPage> {
                         color: Colors.greenAccent.withOpacity(0.3),
                       ),
                     ),
-                    child: const Row(
+                    child: Row(
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.info_outline,
                           color: Colors.greenAccent,
                           size: 16,
                         ),
-                        SizedBox(width: 8),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            "FEFO: Medicines are sorted by earliest expiry first. Always dispense from the top of this list.",
-                            style: TextStyle(
+                            "FEFO for ${PharmacySession.pharmacyName ?? 'Your Pharmacy'} — sorted by earliest expiry. Dispense from the top.",
+                            style: const TextStyle(
                               color: Colors.white60,
                               fontSize: 12,
                             ),
@@ -442,7 +416,6 @@ class _FefoSystemPageState extends State<FefoSystemPage> {
 
                 const SizedBox(height: 10),
 
-                // ── SEARCH ───────────────────────────
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: TextField(
@@ -467,7 +440,6 @@ class _FefoSystemPageState extends State<FefoSystemPage> {
 
                 const SizedBox(height: 10),
 
-                // ── LEGEND ───────────────────────────
                 if (!loading)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -491,7 +463,6 @@ class _FefoSystemPageState extends State<FefoSystemPage> {
 
                 const SizedBox(height: 10),
 
-                // ── FEFO LIST ─────────────────────────
                 Expanded(
                   child: loading
                       ? const Center(
@@ -558,7 +529,6 @@ class _FefoSystemPageState extends State<FefoSystemPage> {
                                 ),
                                 child: Row(
                                   children: [
-                                    // Priority number
                                     Container(
                                       width: 36,
                                       height: 36,
@@ -581,8 +551,6 @@ class _FefoSystemPageState extends State<FefoSystemPage> {
                                       ),
                                     ),
                                     const SizedBox(width: 12),
-
-                                    // Content
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment:
@@ -645,8 +613,6 @@ class _FefoSystemPageState extends State<FefoSystemPage> {
                                         ],
                                       ),
                                     ),
-
-                                    // Arrow
                                     Icon(
                                       Icons.arrow_forward_ios,
                                       color: color.withOpacity(0.5),

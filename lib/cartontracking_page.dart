@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter_barcode_scanner/flutter_barcode_scanner.dart';
+import 'package:guardianpharma/pharmacy_wrapper_page.dart';
 
 class CartonTrackingPage extends StatefulWidget {
   const CartonTrackingPage({super.key});
@@ -33,6 +33,11 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
   Future<void> _loadData() async {
     setState(() => loading = true);
     try {
+      // ✅ Only load manufacturers that have medicine boxes belonging to this pharmacy
+      // We join through cartons -> medicine_boxes filtered by pharmacy_id
+      // But manufacturers are global — we show all manufacturers
+      // because a manufacturer can serve multiple pharmacies.
+      // What we scope is the medicine_boxes shown inside each manufacturer.
       final manufacturersRes = await supabase
           .from('manufacturers')
           .select()
@@ -150,7 +155,7 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
 
   // =========================
   // ADD / EDIT MEDICINE BOX
-  // ✅ generic_name added
+  // ✅ Scoped to current pharmacy
   // =========================
   void _showMedicineBoxDialog(
     String cartonId,
@@ -206,7 +211,6 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Manufacturer name read only
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -231,28 +235,20 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
                   ),
                 ),
                 const SizedBox(height: 10),
-
-                // ✅ MEDICINE NAME
                 _dialogInput(
                   medicineNameController,
                   "Medicine Name",
                   Icons.medication,
                 ),
                 const SizedBox(height: 10),
-
-                // ✅ GENERIC NAME — NEW
                 _dialogInput(
                   genericNameController,
                   "Generic Name (e.g. Atorvastatin)",
                   Icons.science_outlined,
                 ),
                 const SizedBox(height: 10),
-
-                // ✅ BATCH NUMBER
                 _dialogInput(batchController, "Batch Number", Icons.numbers),
                 const SizedBox(height: 10),
-
-                // ✅ EXPIRY DATE PICKER
                 TextField(
                   controller: expiryController,
                   style: const TextStyle(color: Colors.white),
@@ -285,8 +281,6 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
                   },
                 ),
                 const SizedBox(height: 10),
-
-                // ✅ QUANTITY
                 _dialogInput(
                   quantityController,
                   "Quantity (boxes)",
@@ -294,8 +288,6 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
                   isNumber: true,
                 ),
                 const SizedBox(height: 10),
-
-                // ✅ STRIPS PER BOX — NEW
                 _dialogInput(
                   stripsPerBoxController,
                   "Strips per Box (default 10)",
@@ -303,8 +295,6 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
                   isNumber: true,
                 ),
                 const SizedBox(height: 10),
-
-                // ✅ UNIT DROPDOWN
                 DropdownButtonFormField<String>(
                   value: selectedUnit,
                   dropdownColor: const Color(0xFF1E1E2E),
@@ -339,8 +329,6 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
                     });
                   },
                 ),
-
-                // ✅ CUSTOM UNIT INPUT
                 if (isCustomUnit) ...[
                   const SizedBox(height: 10),
                   _dialogInput(
@@ -349,10 +337,7 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
                     Icons.edit,
                   ),
                 ],
-
                 const SizedBox(height: 10),
-
-                // ✅ PRICE PER BOX
                 _dialogInput(
                   priceController,
                   "Price per Box (BDT)",
@@ -360,8 +345,6 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
                   isDecimal: true,
                 ),
                 const SizedBox(height: 10),
-
-                // ✅ PRICE PER STRIP — NEW
                 _dialogInput(
                   pricePerStripController,
                   "Price per Strip (BDT, optional)",
@@ -451,6 +434,7 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
                         .eq('id', existing['id']);
                     _success("Medicine box updated!");
                   } else {
+                    // ✅ INSERT WITH pharmacy_id from session
                     await supabase.from('medicine_boxes').insert({
                       'carton_id': cartonId,
                       'medicine_name': name,
@@ -463,6 +447,7 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
                       'price': price,
                       'price_per_strip': pricePerStrip,
                       'created_by': supabase.auth.currentUser!.id,
+                      'pharmacy_id': PharmacySession.pharmacyId, // ✅ scoped
                     });
                     _success("Medicine box added!");
                   }
@@ -484,7 +469,7 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
 
   // =========================
   // VIEW MEDICINE BOXES
-  // ✅ generic_name shown in list
+  // ✅ Filtered by current pharmacy_id
   // =========================
   void _showMedicineBoxes(
     String manufacturerId,
@@ -503,10 +488,12 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
 
     final cartonId = cartonRes['id'];
 
+    // ✅ Filter medicine boxes by both carton_id AND pharmacy_id
     final boxes = await supabase
         .from('medicine_boxes')
         .select()
         .eq('carton_id', cartonId)
+        .eq('pharmacy_id', PharmacySession.pharmacyId ?? '')
         .order('expiry_date');
 
     final List<Map<String, dynamic>> boxList = List<Map<String, dynamic>>.from(
@@ -570,7 +557,7 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
                   ? const Expanded(
                       child: Center(
                         child: Text(
-                          "No medicine boxes yet",
+                          "No medicine boxes for this pharmacy yet",
                           style: TextStyle(color: Colors.white54),
                         ),
                       ),
@@ -619,7 +606,6 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
                               subtitle: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // ✅ GENERIC NAME shown in blue
                                   if (genericName.isNotEmpty)
                                     Text(
                                       "🧬 $genericName",
@@ -725,8 +711,8 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
   }
 
   // =========================
-  // MEDICINE STRIP VERIFIER
-  // ✅ generic_name shown in result
+  // STRIP VERIFIER
+  // ✅ Scoped to current pharmacy
   // =========================
   void _showStripVerifier() {
     final batchController = TextEditingController();
@@ -761,70 +747,30 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  "Enter or scan the batch number on the medicine strip",
+                  "Enter the batch number on the medicine strip",
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.white54, fontSize: 13),
                 ),
                 const SizedBox(height: 16),
 
-                // SEARCH BAR + SCAN BUTTON
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: batchController,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          prefixIcon: const Icon(
-                            Icons.search,
-                            color: Colors.white70,
-                          ),
-                          hintText: "Enter batch number",
-                          hintStyle: const TextStyle(color: Colors.white38),
-                          filled: true,
-                          fillColor: Colors.white.withOpacity(0.08),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide.none,
-                          ),
-                        ),
-                      ),
+                TextField(
+                  controller: batchController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search, color: Colors.white70),
+                    hintText: "Enter batch number",
+                    hintStyle: const TextStyle(color: Colors.white38),
+                    filled: true,
+                    fillColor: Colors.white.withOpacity(0.08),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
                     ),
-                    const SizedBox(width: 10),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.blueAccent,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: IconButton(
-                        icon: const Icon(
-                          Icons.qr_code_scanner,
-                          color: Colors.white,
-                        ),
-                        onPressed: () async {
-                          try {
-                            final barcode =
-                                await FlutterBarcodeScanner.scanBarcode(
-                                  '#FF0000',
-                                  'Cancel',
-                                  true,
-                                  ScanMode.BARCODE,
-                                );
-                            if (barcode != '-1') {
-                              batchController.text = barcode;
-                            }
-                          } catch (e) {
-                            _error("Scanner error: $e");
-                          }
-                        },
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
 
                 const SizedBox(height: 12),
 
-                // VERIFY BUTTON
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
@@ -861,12 +807,14 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
                         result = null;
                       });
                       try {
+                        // ✅ Scoped to current pharmacy
                         final res = await supabase
                             .from('medicine_boxes')
                             .select(
                               '*, cartons(*, manufacturers(name, country))',
                             )
                             .eq('batch_number', batch)
+                            .eq('pharmacy_id', PharmacySession.pharmacyId ?? '')
                             .maybeSingle();
                         setSheetState(() {
                           result = res;
@@ -886,7 +834,6 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
 
                 const SizedBox(height: 16),
 
-                // RESULT
                 if (searched) ...[
                   if (result == null)
                     Container(
@@ -902,7 +849,7 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
                           SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              "❌ No match found!\nThis strip does NOT belong to any box in the system.",
+                              "❌ No match found!\nThis strip does NOT belong to any box in this pharmacy.",
                               style: TextStyle(
                                 color: Colors.redAccent,
                                 fontWeight: FontWeight.bold,
@@ -970,7 +917,6 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
                                 "💊 Medicine",
                                 result!['medicine_name'],
                               ),
-                              // ✅ GENERIC NAME in verifier result
                               if (genericName.isNotEmpty)
                                 _resultRow("🧬 Generic", genericName),
                               _resultRow(
@@ -1006,6 +952,7 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
                       },
                     ),
                 ],
+
                 const SizedBox(height: 10),
               ],
             ),
@@ -1126,7 +1073,6 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
           SafeArea(
             child: Column(
               children: [
-                // TOP BAR
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(
@@ -1169,7 +1115,6 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
                   ),
                 ),
 
-                // INFO BOX
                 Container(
                   margin: const EdgeInsets.symmetric(horizontal: 16),
                   padding: const EdgeInsets.all(12),
@@ -1178,14 +1123,17 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: Colors.white24),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
-                      Icon(Icons.info_outline, color: Colors.blueAccent),
-                      SizedBox(width: 10),
+                      const Icon(Icons.info_outline, color: Colors.blueAccent),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          "Tap a manufacturer to view & manage medicine boxes",
-                          style: TextStyle(color: Colors.white70, fontSize: 13),
+                          "Showing stock for: ${PharmacySession.pharmacyName ?? 'Your Pharmacy'}. Tap a manufacturer to view & manage medicine boxes.",
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                     ],
@@ -1194,7 +1142,6 @@ class _CartonTrackingPageState extends State<CartonTrackingPage> {
 
                 const SizedBox(height: 12),
 
-                // MANUFACTURERS LIST
                 Expanded(
                   child: loading
                       ? const Center(

@@ -16,6 +16,7 @@ class MyLogin extends StatefulWidget {
 class _MyLoginState extends State<MyLogin> {
   bool rememberMe = false;
   bool loading = false;
+  bool _passwordVisible = false;
 
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
@@ -24,21 +25,65 @@ class _MyLoginState extends State<MyLogin> {
   String selectedRole = "pharmacist";
 
   // =========================
-  // LOGIN FUNCTION (FIXED)
+  // ✅ VALIDATIONS
+  // =========================
+  final RegExp _emailRegex = RegExp(
+    r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+  );
+
+  final RegExp _licenseRegex = RegExp(r'^\d{16}$');
+
+  String? _getEmailError(String email) {
+    if (email.isEmpty) return "Email is required";
+    if (!_emailRegex.hasMatch(email)) return "Enter a valid email address";
+    return null;
+  }
+
+  String? _getLicenseError(String license) {
+    if (license.isEmpty) return "License number is required";
+    if (!_licenseRegex.hasMatch(license))
+      return "License number must be exactly 16 digits";
+    return null;
+  }
+
+  // =========================
+  // LOGIN FUNCTION
   // =========================
   Future<void> login() async {
     final email = emailController.text.trim();
     final password = passwordController.text.trim();
+    final license = licenseController.text.trim();
 
-    if (email.isEmpty || password.isEmpty) {
-      _error("Email and password required");
+    // Validate email
+    final emailError = _getEmailError(email);
+    if (emailError != null) {
+      _error(emailError);
       return;
+    }
+
+    // Validate password
+    if (password.isEmpty) {
+      _error("Password is required");
+      return;
+    }
+
+    if (password.length < 6) {
+      _error("Password must be at least 6 characters");
+      return;
+    }
+
+    // Validate license for regulatory
+    if (selectedRole == "regulatory") {
+      final licenseError = _getLicenseError(license);
+      if (licenseError != null) {
+        _error(licenseError);
+        return;
+      }
     }
 
     setState(() => loading = true);
 
     try {
-      // ✅ FIX: Sign out any stale session first
       await Supabase.instance.client.auth.signOut();
 
       final res = await Supabase.instance.client.auth.signInWithPassword(
@@ -48,7 +93,36 @@ class _MyLoginState extends State<MyLogin> {
 
       if (res.user == null) throw "Login failed";
 
-      // ✅ Give session time to stabilize
+      // If regulatory, verify license number matches profile
+      if (selectedRole == "regulatory") {
+        final profile = await Supabase.instance.client
+            .from('profiles')
+            .select('license_number, role')
+            .eq('id', res.user!.id)
+            .maybeSingle();
+
+        if (profile == null) {
+          await Supabase.instance.client.auth.signOut();
+          _error("Profile not found");
+          setState(() => loading = false);
+          return;
+        }
+
+        if (profile['role'] != 'regulatory') {
+          await Supabase.instance.client.auth.signOut();
+          _error("This account is not a Regulatory Authority account");
+          setState(() => loading = false);
+          return;
+        }
+
+        if (profile['license_number'] != license) {
+          await Supabase.instance.client.auth.signOut();
+          _error("License number does not match");
+          setState(() => loading = false);
+          return;
+        }
+      }
+
       await Future.delayed(const Duration(milliseconds: 500));
 
       if (!mounted) return;
@@ -59,7 +133,6 @@ class _MyLoginState extends State<MyLogin> {
         (route) => false,
       );
     } on AuthException catch (e) {
-      // ✅ Catches Supabase-specific auth errors with clean messages
       _error(e.message);
     } catch (e) {
       _error(e.toString());
@@ -74,14 +147,14 @@ class _MyLoginState extends State<MyLogin> {
   Future<void> forgotPassword() async {
     final email = emailController.text.trim();
 
-    if (email.isEmpty) {
-      _error("Enter email first");
+    final emailError = _getEmailError(email);
+    if (emailError != null) {
+      _error("Please enter a valid email first");
       return;
     }
 
     try {
       await Supabase.instance.client.auth.resetPasswordForEmail(email);
-
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Password reset email sent"),
@@ -104,18 +177,15 @@ class _MyLoginState extends State<MyLogin> {
     return Scaffold(
       body: Stack(
         children: [
-          // 🌄 BACKGROUND
           Positioned.fill(
             child: Image.asset(
               'assets/images/guardianpharmapills.jpg',
               fit: BoxFit.cover,
             ),
           ),
-
           Positioned.fill(
             child: Container(color: Colors.black.withOpacity(0.25)),
           ),
-
           Center(
             child: SingleChildScrollView(
               child: ClipRRect(
@@ -151,9 +221,7 @@ class _MyLoginState extends State<MyLogin> {
                             size: 42,
                           ),
                         ),
-
                         const SizedBox(height: 16),
-
                         Text(
                           "Welcome Back",
                           style: GoogleFonts.montserrat(
@@ -162,22 +230,47 @@ class _MyLoginState extends State<MyLogin> {
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-
                         const SizedBox(height: 26),
 
+                        // EMAIL
                         _input(emailController, "Email", Icons.email_outlined),
-
                         const SizedBox(height: 12),
 
-                        _input(
-                          passwordController,
-                          "Password",
-                          Icons.lock_outline,
-                          isPass: true,
+                        // PASSWORD with show/hide
+                        TextField(
+                          controller: passwordController,
+                          obscureText: !_passwordVisible,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            prefixIcon: const Icon(
+                              Icons.lock_outline,
+                              color: Colors.white70,
+                            ),
+                            hintText: "Password (min 6 characters)",
+                            hintStyle: const TextStyle(color: Colors.white38),
+                            filled: true,
+                            fillColor: Colors.white.withOpacity(0.08),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide.none,
+                            ),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _passwordVisible
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
+                                color: Colors.white54,
+                                size: 20,
+                              ),
+                              onPressed: () => setState(
+                                () => _passwordVisible = !_passwordVisible,
+                              ),
+                            ),
+                          ),
                         ),
-
                         const SizedBox(height: 12),
 
+                        // ROLE DROPDOWN
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                           decoration: BoxDecoration(
@@ -205,18 +298,31 @@ class _MyLoginState extends State<MyLogin> {
                             },
                           ),
                         ),
-
                         const SizedBox(height: 12),
 
-                        if (selectedRole == "regulatory")
+                        // LICENSE (regulatory only)
+                        if (selectedRole == "regulatory") ...[
                           _input(
                             licenseController,
-                            "License Number",
+                            "License Number (16 digits)",
                             Icons.badge_outlined,
+                            keyboardType: TextInputType.number,
+                            maxLength: 16,
                           ),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4, left: 4),
+                            child: const Text(
+                              "Must be exactly 16 numeric digits",
+                              style: TextStyle(
+                                color: Colors.white38,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
 
-                        const SizedBox(height: 12),
-
+                        // REMEMBER ME + FORGOT PASSWORD
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -234,7 +340,6 @@ class _MyLoginState extends State<MyLogin> {
                                 ),
                               ],
                             ),
-
                             TextButton(
                               onPressed: forgotPassword,
                               child: const Text(
@@ -247,6 +352,7 @@ class _MyLoginState extends State<MyLogin> {
 
                         const SizedBox(height: 10),
 
+                        // LOGIN BUTTON
                         SizedBox(
                           width: double.infinity,
                           height: 48,
@@ -265,7 +371,6 @@ class _MyLoginState extends State<MyLogin> {
                                   ),
                           ),
                         ),
-
                         const SizedBox(height: 14),
 
                         GestureDetector(
@@ -299,10 +404,14 @@ class _MyLoginState extends State<MyLogin> {
     String hint,
     IconData icon, {
     bool isPass = false,
+    TextInputType? keyboardType,
+    int? maxLength,
   }) {
     return TextField(
       controller: controller,
       obscureText: isPass,
+      keyboardType: keyboardType,
+      maxLength: maxLength,
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         prefixIcon: Icon(icon, color: Colors.white70),
@@ -310,6 +419,7 @@ class _MyLoginState extends State<MyLogin> {
         hintStyle: const TextStyle(color: Colors.white38),
         filled: true,
         fillColor: Colors.white.withOpacity(0.08),
+        counterStyle: const TextStyle(color: Colors.white38),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,

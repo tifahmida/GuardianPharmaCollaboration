@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:guardianpharma/pharmacy_wrapper_page.dart';
 
 class LethalDoseProtectionPage extends StatefulWidget {
   const LethalDoseProtectionPage({super.key});
@@ -31,12 +32,14 @@ class _LethalDoseProtectionPageState extends State<LethalDoseProtectionPage> {
     super.dispose();
   }
 
+  // ✅ Scoped to current pharmacy
   Future<void> _loadMedicines() async {
     setState(() => loading = true);
     try {
       final res = await supabase
           .from('medicine_boxes')
           .select('*, cartons(*, manufacturers(name))')
+          .eq('pharmacy_id', PharmacySession.pharmacyId ?? '')
           .gt('quantity', 0)
           .order('medicine_name');
       setState(() {
@@ -70,6 +73,7 @@ class _LethalDoseProtectionPageState extends State<LethalDoseProtectionPage> {
     return (100000 + Random().nextInt(900000)).toString();
   }
 
+  // ✅ Weekly usage check scoped to pharmacy
   Future<int> _getWeeklyUsage(String medicineName, String customerPhone) async {
     try {
       final weekAgo = DateTime.now().subtract(const Duration(days: 7));
@@ -78,6 +82,7 @@ class _LethalDoseProtectionPageState extends State<LethalDoseProtectionPage> {
           .select('quantity_sold')
           .eq('medicine_name', medicineName)
           .eq('customer_phone', customerPhone)
+          .eq('pharmacy_id', PharmacySession.pharmacyId ?? '')
           .gte('created_at', weekAgo.toIso8601String());
       final List data = List<Map<String, dynamic>>.from(res);
       int total = 0;
@@ -90,10 +95,6 @@ class _LethalDoseProtectionPageState extends State<LethalDoseProtectionPage> {
     }
   }
 
-  // =========================
-  // SELL DIALOG
-  // ✅ maxQty removed — was unused
-  // =========================
   void _showSellDialog(Map<String, dynamic> medicine) {
     final String medicineName = medicine['medicine_name']?.toString() ?? '';
     final String genericName = medicine['generic_name']?.toString() ?? '';
@@ -119,10 +120,7 @@ class _LethalDoseProtectionPageState extends State<LethalDoseProtectionPage> {
       context: context,
       builder: (_) => StatefulBuilder(
         builder: (context, setDialogState) {
-          // ✅ FIXED: removed unused maxQty
-          // only unitPrice needed for total calc
           double unitPrice;
-
           if (saleType == 'strip') {
             unitPrice = pricePerStrip;
           } else if (saleType == 'box') {
@@ -220,7 +218,6 @@ class _LethalDoseProtectionPageState extends State<LethalDoseProtectionPage> {
                     ),
                   ),
                   const SizedBox(height: 14),
-
                   const Text(
                     "Sell as:",
                     style: TextStyle(color: Colors.white70, fontSize: 13),
@@ -242,7 +239,6 @@ class _LethalDoseProtectionPageState extends State<LethalDoseProtectionPage> {
                     ],
                   ),
                   const SizedBox(height: 14),
-
                   if (saleType != 'carton') ...[
                     const Text(
                       "Quantity:",
@@ -271,7 +267,6 @@ class _LethalDoseProtectionPageState extends State<LethalDoseProtectionPage> {
                     ),
                     const SizedBox(height: 14),
                   ],
-
                   const Text(
                     "Customer Name (required for high qty):",
                     style: TextStyle(color: Colors.white70, fontSize: 13),
@@ -296,7 +291,6 @@ class _LethalDoseProtectionPageState extends State<LethalDoseProtectionPage> {
                     ),
                   ),
                   const SizedBox(height: 10),
-
                   const Text(
                     "Phone Number:",
                     style: TextStyle(color: Colors.white70, fontSize: 13),
@@ -321,9 +315,7 @@ class _LethalDoseProtectionPageState extends State<LethalDoseProtectionPage> {
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 14),
-
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -386,16 +378,13 @@ class _LethalDoseProtectionPageState extends State<LethalDoseProtectionPage> {
                   final int qty = saleType == 'carton'
                       ? 1
                       : (int.tryParse(qtyController.text) ?? 1);
-
                   if (qty <= 0) {
                     _error("Quantity must be at least 1");
                     return;
                   }
-
                   final String customer = customerController.text.trim();
                   final String phone = phoneController.text.trim();
 
-                  // CHECK 1: max per transaction
                   if (qty > maxPerTransaction) {
                     Navigator.pop(context);
                     _showLimitWarning(
@@ -413,7 +402,6 @@ class _LethalDoseProtectionPageState extends State<LethalDoseProtectionPage> {
                     return;
                   }
 
-                  // CHECK 2: max per week
                   if (phone.isNotEmpty) {
                     final int weeklyUsage = await _getWeeklyUsage(
                       medicineName,
@@ -437,7 +425,6 @@ class _LethalDoseProtectionPageState extends State<LethalDoseProtectionPage> {
                     }
                   }
 
-                  // No limit exceeded
                   Navigator.pop(context);
                   await _completeSale(
                     medicine: medicine,
@@ -461,9 +448,6 @@ class _LethalDoseProtectionPageState extends State<LethalDoseProtectionPage> {
     );
   }
 
-  // =========================
-  // LIMIT WARNING DIALOG
-  // =========================
   void _showLimitWarning({
     required String title,
     required String message,
@@ -565,9 +549,6 @@ class _LethalDoseProtectionPageState extends State<LethalDoseProtectionPage> {
     );
   }
 
-  // =========================
-  // OTP DIALOG
-  // =========================
   void _showOtpDialog({
     required Map<String, dynamic> medicine,
     required int qty,
@@ -762,9 +743,7 @@ class _LethalDoseProtectionPageState extends State<LethalDoseProtectionPage> {
     );
   }
 
-  // =========================
-  // COMPLETE SALE
-  // =========================
+  // ✅ Sale saved with pharmacy_id
   Future<void> _completeSale({
     required Map<String, dynamic> medicine,
     required String saleType,
@@ -792,6 +771,7 @@ class _LethalDoseProtectionPageState extends State<LethalDoseProtectionPage> {
         'customer_name': customer.isEmpty ? null : customer,
         'customer_phone': phone.isEmpty ? null : phone,
         'sold_by': userId,
+        'pharmacy_id': PharmacySession.pharmacyId, // ✅ scoped
       });
 
       final int currentQty = (medicine['quantity'] as int?) ?? 0;
@@ -829,9 +809,6 @@ class _LethalDoseProtectionPageState extends State<LethalDoseProtectionPage> {
     }
   }
 
-  // =========================
-  // RECEIPT
-  // =========================
   void _showReceipt({
     required String medicineName,
     required String batchNumber,
@@ -844,9 +821,7 @@ class _LethalDoseProtectionPageState extends State<LethalDoseProtectionPage> {
   }) {
     final DateTime now = DateTime.now();
     final String dateStr =
-        "${now.day.toString().padLeft(2, '0')}/"
-        "${now.month.toString().padLeft(2, '0')}/"
-        "${now.year}";
+        "${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}";
     final int hour = now.hour;
     final String period = hour >= 12 ? 'PM' : 'AM';
     final int hour12 = hour == 0
@@ -855,8 +830,7 @@ class _LethalDoseProtectionPageState extends State<LethalDoseProtectionPage> {
         ? hour - 12
         : hour;
     final String timeStr =
-        "${hour12.toString().padLeft(2, '0')}:"
-        "${now.minute.toString().padLeft(2, '0')} $period";
+        "${hour12.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} $period";
 
     showDialog(
       context: context,
@@ -885,9 +859,9 @@ class _LethalDoseProtectionPageState extends State<LethalDoseProtectionPage> {
               size: 36,
             ),
             const SizedBox(height: 4),
-            const Text(
-              "GuardianPharma",
-              style: TextStyle(
+            Text(
+              PharmacySession.pharmacyName ?? "GuardianPharma",
+              style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
                 fontSize: 18,
@@ -1110,6 +1084,7 @@ class _LethalDoseProtectionPageState extends State<LethalDoseProtectionPage> {
                   ),
                 ),
 
+                // Pharmacy + info banner
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Container(
@@ -1121,14 +1096,18 @@ class _LethalDoseProtectionPageState extends State<LethalDoseProtectionPage> {
                         color: Colors.redAccent.withOpacity(0.3),
                       ),
                     ),
-                    child: const Row(
+                    child: Row(
                       children: [
-                        Icon(Icons.shield, color: Colors.redAccent, size: 16),
-                        SizedBox(width: 8),
+                        const Icon(
+                          Icons.shield,
+                          color: Colors.redAccent,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            "Protected sale mode — transaction & weekly limits enforced. OTP required to override.",
-                            style: TextStyle(
+                            "Protected sale mode for ${PharmacySession.pharmacyName ?? 'Your Pharmacy'} — transaction & weekly limits enforced. OTP required to override.",
+                            style: const TextStyle(
                               color: Colors.white60,
                               fontSize: 12,
                             ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:guardianpharma/pharmacy_wrapper_page.dart';
 
 class ExpiryAlertsPage extends StatefulWidget {
   const ExpiryAlertsPage({super.key});
@@ -23,6 +24,7 @@ class _ExpiryAlertsPageState extends State<ExpiryAlertsPage> {
 
   // =========================
   // LOAD EXPIRY DATA
+  // ✅ Scoped to current pharmacy
   // =========================
   Future<void> _loadExpiryData() async {
     setState(() => loading = true);
@@ -31,23 +33,26 @@ class _ExpiryAlertsPageState extends State<ExpiryAlertsPage> {
       final today = DateTime(now.year, now.month, now.day);
       final in30Days = today.add(const Duration(days: 30));
 
-      // Format dates for Supabase query
       final String todayStr =
           "${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}";
       final String in30DaysStr =
           "${in30Days.year}-${in30Days.month.toString().padLeft(2, '0')}-${in30Days.day.toString().padLeft(2, '0')}";
 
-      // Fetch expired medicines
+      final String pharmacyId = PharmacySession.pharmacyId ?? '';
+
+      // ✅ Filter expired medicines by pharmacy_id
       final expiredRes = await supabase
           .from('medicine_boxes')
           .select('*, cartons(*, manufacturers(name))')
+          .eq('pharmacy_id', pharmacyId)
           .lt('expiry_date', todayStr)
           .order('expiry_date', ascending: true);
 
-      // Fetch expiring soon medicines (within 30 days)
+      // ✅ Filter expiring soon medicines by pharmacy_id
       final expiringSoonRes = await supabase
           .from('medicine_boxes')
           .select('*, cartons(*, manufacturers(name))')
+          .eq('pharmacy_id', pharmacyId)
           .gte('expiry_date', todayStr)
           .lte('expiry_date', in30DaysStr)
           .order('expiry_date', ascending: true);
@@ -65,10 +70,6 @@ class _ExpiryAlertsPageState extends State<ExpiryAlertsPage> {
     }
   }
 
-  // =========================
-  // EXPIRED MEDICINE WARNING DIALOG
-  // shown before selling expired medicine
-  // =========================
   void _showExpiredWarning(Map<String, dynamic> medicine) {
     showDialog(
       context: context,
@@ -162,9 +163,6 @@ class _ExpiryAlertsPageState extends State<ExpiryAlertsPage> {
     context,
   ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
 
-  // =========================
-  // MEDICINE CARD
-  // =========================
   Widget _medicineCard(Map<String, dynamic> medicine, bool isExpired) {
     final String name = medicine['medicine_name']?.toString() ?? '';
     final String batch = medicine['batch_number']?.toString() ?? '';
@@ -200,7 +198,6 @@ class _ExpiryAlertsPageState extends State<ExpiryAlertsPage> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Icon
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
@@ -214,13 +211,10 @@ class _ExpiryAlertsPageState extends State<ExpiryAlertsPage> {
               ),
             ),
             const SizedBox(width: 12),
-
-            // Content
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Medicine name
                   Text(
                     name,
                     style: const TextStyle(
@@ -230,15 +224,11 @@ class _ExpiryAlertsPageState extends State<ExpiryAlertsPage> {
                     ),
                   ),
                   const SizedBox(height: 4),
-
-                  // Manufacturer
                   Text(
                     "🏭 $manufacturer",
                     style: const TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                   const SizedBox(height: 4),
-
-                  // Batch + Qty
                   Row(
                     children: [
                       _infoChip("Batch: $batch", Colors.white24),
@@ -247,8 +237,6 @@ class _ExpiryAlertsPageState extends State<ExpiryAlertsPage> {
                     ],
                   ),
                   const SizedBox(height: 6),
-
-                  // Expiry status
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 10,
@@ -270,8 +258,6 @@ class _ExpiryAlertsPageState extends State<ExpiryAlertsPage> {
                       ),
                     ),
                   ),
-
-                  // Tap hint for expired
                   if (isExpired) ...[
                     const SizedBox(height: 6),
                     const Text(
@@ -302,9 +288,6 @@ class _ExpiryAlertsPageState extends State<ExpiryAlertsPage> {
     );
   }
 
-  // =========================
-  // SECTION HEADER
-  // =========================
   Widget _sectionHeader(String title, int count, Color color) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -349,15 +332,11 @@ class _ExpiryAlertsPageState extends State<ExpiryAlertsPage> {
     );
   }
 
-  // =========================
-  // BUILD
-  // =========================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(
         children: [
-          // Background
           Positioned.fill(
             child: Image.asset(
               'assets/images/guardianpharmapills.jpg',
@@ -367,11 +346,9 @@ class _ExpiryAlertsPageState extends State<ExpiryAlertsPage> {
           Positioned.fill(
             child: Container(color: Colors.black.withOpacity(0.45)),
           ),
-
           SafeArea(
             child: Column(
               children: [
-                // ── TOP BAR ──────────────────────────
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(
@@ -400,13 +377,46 @@ class _ExpiryAlertsPageState extends State<ExpiryAlertsPage> {
                   ),
                 ),
 
-                // ── SUMMARY BAR ───────────────────────
+                // Pharmacy label
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.local_pharmacy,
+                          color: Colors.blueAccent,
+                          size: 14,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          PharmacySession.pharmacyName ?? 'Your Pharmacy',
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+
                 if (!loading)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Row(
                       children: [
-                        // Expired count
                         Expanded(
                           child: Container(
                             padding: const EdgeInsets.all(12),
@@ -439,7 +449,6 @@ class _ExpiryAlertsPageState extends State<ExpiryAlertsPage> {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        // Expiring soon count
                         Expanded(
                           child: Container(
                             padding: const EdgeInsets.all(12),
@@ -477,7 +486,6 @@ class _ExpiryAlertsPageState extends State<ExpiryAlertsPage> {
 
                 const SizedBox(height: 12),
 
-                // ── CONTENT ───────────────────────────
                 Expanded(
                   child: loading
                       ? const Center(
@@ -520,7 +528,6 @@ class _ExpiryAlertsPageState extends State<ExpiryAlertsPage> {
                       : ListView(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           children: [
-                            // EXPIRED SECTION
                             if (expiredMedicines.isNotEmpty) ...[
                               _sectionHeader(
                                 "⛔ Expired Medicines",
@@ -532,8 +539,6 @@ class _ExpiryAlertsPageState extends State<ExpiryAlertsPage> {
                               ),
                               const SizedBox(height: 16),
                             ],
-
-                            // EXPIRING SOON SECTION
                             if (expiringSoonMedicines.isNotEmpty) ...[
                               _sectionHeader(
                                 "⚠️ Expiring Soon (within 30 days)",
@@ -544,7 +549,6 @@ class _ExpiryAlertsPageState extends State<ExpiryAlertsPage> {
                                 (m) => _medicineCard(m, false),
                               ),
                             ],
-
                             const SizedBox(height: 20),
                           ],
                         ),

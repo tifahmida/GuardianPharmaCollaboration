@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:guardianpharma/pharmacy_wrapper_page.dart';
 
 class InventoryListPage extends StatefulWidget {
   const InventoryListPage({super.key});
@@ -30,15 +31,14 @@ class _InventoryListPageState extends State<InventoryListPage> {
     super.dispose();
   }
 
-  // =========================
-  // LOAD INVENTORY
-  // =========================
+  // ✅ Scoped to current pharmacy
   Future<void> _loadInventory() async {
     setState(() => loading = true);
     try {
       final res = await supabase
           .from('medicine_boxes')
           .select('*, cartons(*, manufacturers(name, country))')
+          .eq('pharmacy_id', PharmacySession.pharmacyId ?? '')
           .order('medicine_name');
 
       setState(() {
@@ -52,9 +52,6 @@ class _InventoryListPageState extends State<InventoryListPage> {
     }
   }
 
-  // =========================
-  // FILTER
-  // =========================
   void _filterMedicines() {
     final query = searchController.text.toLowerCase();
     setState(() {
@@ -73,9 +70,6 @@ class _InventoryListPageState extends State<InventoryListPage> {
     });
   }
 
-  // =========================
-  // STOCK STATUS
-  // =========================
   Color _stockColor(int qty) {
     if (qty <= 0) return Colors.redAccent;
     if (qty <= 10) return Colors.orange;
@@ -94,9 +88,6 @@ class _InventoryListPageState extends State<InventoryListPage> {
     return Icons.check_circle;
   }
 
-  // =========================
-  // MEDICINE LOOKUP BOTTOM SHEET
-  // =========================
   void _showMedicineLookup(Map<String, dynamic> m) {
     final int qty = (m['quantity'] as int?) ?? 0;
     final String name = m['medicine_name']?.toString() ?? '';
@@ -136,7 +127,6 @@ class _InventoryListPageState extends State<InventoryListPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // HEADER
               Row(
                 children: [
                   CircleAvatar(
@@ -172,7 +162,6 @@ class _InventoryListPageState extends State<InventoryListPage> {
                       ],
                     ),
                   ),
-                  // STOCK BADGE
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 10,
@@ -207,28 +196,19 @@ class _InventoryListPageState extends State<InventoryListPage> {
                   ),
                 ],
               ),
-
               const SizedBox(height: 16),
               const Divider(color: Colors.white24),
               const SizedBox(height: 8),
-
-              // SECTION: MANUFACTURER INFO
               _lookupSection("🏭 Manufacturer Information"),
               _lookupRow("Name", manufacturer),
               _lookupRow("Country", country),
-
               const SizedBox(height: 12),
-
-              // SECTION: MEDICINE INFO
               _lookupSection("💊 Medicine Information"),
               _lookupRow("Medicine Name", name),
               if (generic.isNotEmpty) _lookupRow("Generic Name", generic),
               _lookupRow("Batch Number", batch),
               _lookupRow("Unit Type", unit),
-
               const SizedBox(height: 12),
-
-              // SECTION: STOCK INFO
               _lookupSection("📦 Stock Information"),
               _lookupRow(
                 "Quantity",
@@ -236,10 +216,7 @@ class _InventoryListPageState extends State<InventoryListPage> {
                 valueColor: _stockColor(qty),
               ),
               _lookupRow("Strips per Box", stripsPerBox.toString()),
-
               const SizedBox(height: 12),
-
-              // SECTION: PRICING
               _lookupSection("💰 Pricing"),
               _lookupRow("Price per Box", "BDT ${price.toStringAsFixed(2)}"),
               if (pricePerStrip != null)
@@ -247,10 +224,7 @@ class _InventoryListPageState extends State<InventoryListPage> {
                   "Price per Strip",
                   "BDT ${pricePerStrip.toStringAsFixed(2)}",
                 ),
-
               const SizedBox(height: 12),
-
-              // SECTION: EXPIRY
               _lookupSection("📅 Expiry Information"),
               _lookupRow(
                 "Expiry Date",
@@ -265,10 +239,7 @@ class _InventoryListPageState extends State<InventoryListPage> {
                     ? Colors.orange
                     : Colors.greenAccent,
               ),
-
               const SizedBox(height: 20),
-
-              // CLOSE BUTTON
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -341,9 +312,6 @@ class _InventoryListPageState extends State<InventoryListPage> {
     context,
   ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
 
-  // =========================
-  // SUMMARY COUNTS
-  // =========================
   int get _outOfStock =>
       allMedicines.where((m) => (m['quantity'] as int? ?? 0) <= 0).length;
   int get _lowStock => allMedicines
@@ -373,7 +341,6 @@ class _InventoryListPageState extends State<InventoryListPage> {
           SafeArea(
             child: Column(
               children: [
-                // TOP BAR
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(
@@ -402,7 +369,41 @@ class _InventoryListPageState extends State<InventoryListPage> {
                   ),
                 ),
 
-                // SEARCH BAR
+                // Pharmacy label
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.local_pharmacy,
+                          color: Colors.blueAccent,
+                          size: 14,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          PharmacySession.pharmacyName ?? 'Your Pharmacy',
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: TextField(
@@ -439,7 +440,6 @@ class _InventoryListPageState extends State<InventoryListPage> {
 
                 const SizedBox(height: 10),
 
-                // INFO HINT
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Container(
@@ -473,7 +473,6 @@ class _InventoryListPageState extends State<InventoryListPage> {
 
                 const SizedBox(height: 10),
 
-                // SUMMARY ROW
                 if (!loading)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -508,7 +507,6 @@ class _InventoryListPageState extends State<InventoryListPage> {
 
                 const SizedBox(height: 12),
 
-                // MEDICINE LIST
                 Expanded(
                   child: loading
                       ? const Center(
@@ -590,7 +588,6 @@ class _InventoryListPageState extends State<InventoryListPage> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      // NAME + STOCK BADGE
                                       Row(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
@@ -658,12 +655,9 @@ class _InventoryListPageState extends State<InventoryListPage> {
                                           ),
                                         ],
                                       ),
-
                                       const SizedBox(height: 10),
                                       const Divider(color: Colors.white12),
                                       const SizedBox(height: 6),
-
-                                      // DETAILS GRID
                                       Row(
                                         children: [
                                           Expanded(
@@ -724,8 +718,6 @@ class _InventoryListPageState extends State<InventoryListPage> {
                                           ),
                                         ],
                                       ),
-
-                                      // TAP HINT
                                       const SizedBox(height: 8),
                                       const Row(
                                         mainAxisAlignment:

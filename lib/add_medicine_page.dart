@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:guardianpharma/pharmacy_wrapper_page.dart';
 
 class AddMedicinePage extends StatefulWidget {
   const AddMedicinePage({super.key});
@@ -17,7 +18,6 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
   String selectedUnit = 'Tablets';
   bool isCustomUnit = false;
   bool loading = false;
-  bool scanning = false;
 
   final List<String> _units = [
     'Tablets',
@@ -58,9 +58,6 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
     super.dispose();
   }
 
-  // =========================
-  // LOAD MANUFACTURERS
-  // =========================
   Future<void> _loadManufacturers() async {
     try {
       final res = await supabase.from('manufacturers').select().order('name');
@@ -72,9 +69,6 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
     }
   }
 
-  // =========================
-  // WEB-FRIENDLY BARCODE SCANNER
-  // =========================
   Future<void> _scanBarcode() async {
     final manualController = TextEditingController();
 
@@ -143,6 +137,7 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
 
   // =========================
   // SAVE MEDICINE
+  // ✅ pharmacy_id always included
   // =========================
   Future<void> _saveMedicine() async {
     final name = medicineNameController.text.trim();
@@ -169,7 +164,6 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
     );
     final unit = isCustomUnit ? customUnitController.text.trim() : selectedUnit;
 
-    // Validation
     if (name.isEmpty) {
       _error("Medicine name is required");
       return;
@@ -190,10 +184,15 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
       _error("Please enter custom unit");
       return;
     }
+    if (!PharmacySession.isLoaded) {
+      _error("Pharmacy session not loaded. Please restart the app.");
+      return;
+    }
 
     setState(() => loading = true);
 
     try {
+      // ✅ Always save with pharmacy_id from session
       await supabase.from('medicine_boxes').insert({
         'carton_id': selectedCartonId,
         'medicine_name': name,
@@ -206,6 +205,7 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
         'price': price,
         'price_per_strip': pricePerStrip,
         'created_by': supabase.auth.currentUser!.id,
+        'pharmacy_id': PharmacySession.pharmacyId, // ✅ scoped
       });
 
       _success("✅ Medicine added successfully!");
@@ -217,9 +217,6 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
     setState(() => loading = false);
   }
 
-  // =========================
-  // CLEAR FORM
-  // =========================
   void _clearForm() {
     medicineNameController.clear();
     genericNameController.clear();
@@ -280,7 +277,6 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
     return Scaffold(
       body: Stack(
         children: [
-          // BACKGROUND
           Positioned.fill(
             child: Image.asset(
               'assets/images/guardianpharmapills.jpg',
@@ -290,11 +286,9 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
           Positioned.fill(
             child: Container(color: Colors.black.withOpacity(0.45)),
           ),
-
           SafeArea(
             child: Column(
               children: [
-                // TOP BAR
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(
@@ -315,7 +309,6 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
                           ),
                         ),
                       ),
-                      // CLEAR BUTTON
                       TextButton.icon(
                         onPressed: _clearForm,
                         icon: const Icon(
@@ -331,15 +324,45 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
                     ],
                   ),
                 ),
-
-                // FORM
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // HEADER INFO BOX
+                        // Pharmacy badge
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.blueAccent.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: Colors.blueAccent.withOpacity(0.4),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.local_pharmacy,
+                                color: Colors.blueAccent,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  "Adding to: ${PharmacySession.pharmacyName ?? 'Your Pharmacy'}",
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
@@ -372,7 +395,6 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
 
                         const SizedBox(height: 16),
 
-                        // SCAN BUTTON
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
@@ -401,7 +423,6 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
 
                         const SizedBox(height: 20),
 
-                        // SECTION: MANUFACTURER
                         _sectionTitle("🏭 Manufacturer"),
                         const SizedBox(height: 8),
                         DropdownButtonFormField<String>(
@@ -444,7 +465,6 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
 
                         const SizedBox(height: 20),
 
-                        // SECTION: MEDICINE DETAILS
                         _sectionTitle("💊 Medicine Details"),
                         const SizedBox(height: 8),
                         _fieldInput(
@@ -460,7 +480,6 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
                         ),
                         const SizedBox(height: 12),
 
-                        // BATCH NUMBER — highlighted since barcode fills this
                         Container(
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(14),
@@ -480,7 +499,6 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
 
                         const SizedBox(height: 12),
 
-                        // EXPIRY DATE
                         TextField(
                           controller: expiryController,
                           style: const TextStyle(color: Colors.white),
@@ -517,7 +535,6 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
 
                         const SizedBox(height: 20),
 
-                        // SECTION: STOCK & PRICING
                         _sectionTitle("📦 Stock & Pricing"),
                         const SizedBox(height: 8),
                         _fieldInput(
@@ -535,7 +552,6 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
                         ),
                         const SizedBox(height: 12),
 
-                        // UNIT DROPDOWN
                         StatefulBuilder(
                           builder: (context, setLocalState) => Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -611,7 +627,6 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
 
                         const SizedBox(height: 30),
 
-                        // SAVE BUTTON
                         SizedBox(
                           width: double.infinity,
                           height: 54,

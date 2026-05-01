@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_barcode_scanner/flutter_barcode_scanner.dart';
+import 'package:guardianpharma/pharmacy_wrapper_page.dart';
 
 class SellMedicinePage extends StatefulWidget {
   const SellMedicinePage({super.key});
@@ -36,17 +37,28 @@ class _SellMedicinePageState extends State<SellMedicinePage> {
 
   // =========================
   // LOAD MEDICINES
-  // from medicine_boxes joined with cartons → manufacturers
+  // filtered by pharmacy_id
   // =========================
   Future<void> _loadMedicines() async {
     setState(() => loading = true);
     try {
-      final res = await supabase
+      var query = supabase
           .from('medicine_boxes')
           .select('*, cartons(*, manufacturers(name, country))')
           .gt('quantity', 0)
           .order('medicine_name');
 
+      // ✅ Filter by pharmacy if session loaded
+      if (PharmacySession.isLoaded) {
+        query = supabase
+            .from('medicine_boxes')
+            .select('*, cartons(*, manufacturers(name, country))')
+            .eq('pharmacy_id', PharmacySession.pharmacyId!)
+            .gt('quantity', 0)
+            .order('medicine_name');
+      }
+
+      final res = await query;
       setState(() {
         allMedicines = List<Map<String, dynamic>>.from(res);
         filteredMedicines = allMedicines;
@@ -60,7 +72,6 @@ class _SellMedicinePageState extends State<SellMedicinePage> {
 
   // =========================
   // LOAD WEEKLY TOP MEDICINES
-  // calls the SQL function you created
   // =========================
   Future<void> _loadTopMedicines() async {
     setState(() => loadingTop = true);
@@ -77,7 +88,7 @@ class _SellMedicinePageState extends State<SellMedicinePage> {
   }
 
   // =========================
-  // FILTER — searches name, generic, batch, manufacturer
+  // FILTER
   // =========================
   void _filterMedicines() {
     final String query = searchController.text.toLowerCase();
@@ -150,17 +161,13 @@ class _SellMedicinePageState extends State<SellMedicinePage> {
       builder: (_) => StatefulBuilder(
         builder: (context, setDialogState) {
           double unitPrice;
-          int maxQty;
 
           if (saleType == 'strip') {
             unitPrice = pricePerStrip;
-            maxQty = availableBoxes * stripsPerBox;
           } else if (saleType == 'box') {
             unitPrice = pricePerBox;
-            maxQty = availableBoxes;
           } else {
             unitPrice = pricePerBox * availableBoxes;
-            maxQty = 1;
           }
 
           final int enteredQty = saleType == 'carton'
@@ -235,26 +242,17 @@ class _SellMedicinePageState extends State<SellMedicinePage> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      _chip(
-                        'strip',
-                        '💊 Strip',
-                        saleType,
-                        (v) => setDialogState(() => saleType = v),
-                      ),
+                      _chip('strip', '💊 Strip', saleType, (v) {
+                        setDialogState(() => saleType = v);
+                      }),
                       const SizedBox(width: 8),
-                      _chip(
-                        'box',
-                        '📦 Box',
-                        saleType,
-                        (v) => setDialogState(() => saleType = v),
-                      ),
+                      _chip('box', '📦 Box', saleType, (v) {
+                        setDialogState(() => saleType = v);
+                      }),
                       const SizedBox(width: 8),
-                      _chip(
-                        'carton',
-                        '🏭 Carton',
-                        saleType,
-                        (v) => setDialogState(() => saleType = v),
-                      ),
+                      _chip('carton', '🏭 Carton', saleType, (v) {
+                        setDialogState(() => saleType = v);
+                      }),
                     ],
                   ),
 
@@ -278,8 +276,8 @@ class _SellMedicinePageState extends State<SellMedicinePage> {
                           color: Colors.white70,
                         ),
                         hintText: saleType == 'strip'
-                            ? "Number of strips (max $maxQty)"
-                            : "Number of boxes (max $maxQty)",
+                            ? "Number of strips"
+                            : "Number of boxes",
                         hintStyle: const TextStyle(color: Colors.white38),
                         filled: true,
                         fillColor: Colors.white.withOpacity(0.08),
@@ -387,6 +385,11 @@ class _SellMedicinePageState extends State<SellMedicinePage> {
                     _error("Quantity must be at least 1");
                     return;
                   }
+
+                  final int maxQty = saleType == 'strip'
+                      ? availableBoxes * stripsPerBox
+                      : availableBoxes;
+
                   if (saleType != 'carton' && qty > maxQty) {
                     _error(
                       saleType == 'strip'
@@ -397,7 +400,6 @@ class _SellMedicinePageState extends State<SellMedicinePage> {
                   }
 
                   Navigator.pop(context);
-
                   await _completeSale(
                     medicine: medicine,
                     saleType: saleType,
@@ -422,6 +424,7 @@ class _SellMedicinePageState extends State<SellMedicinePage> {
 
   // =========================
   // COMPLETE SALE
+  // ✅ saves pharmacy_id
   // =========================
   Future<void> _completeSale({
     required Map<String, dynamic> medicine,
@@ -439,7 +442,7 @@ class _SellMedicinePageState extends State<SellMedicinePage> {
     try {
       final String userId = supabase.auth.currentUser!.id;
 
-      // 1. Save to sales table
+      // ✅ Save sale with pharmacy_id
       await supabase.from('sales').insert({
         'medicine_box_id': medicine['id'],
         'medicine_name': medicineName,
@@ -450,9 +453,10 @@ class _SellMedicinePageState extends State<SellMedicinePage> {
         'total_amount': total,
         'customer_name': customer.isEmpty ? null : customer,
         'sold_by': userId,
+        'pharmacy_id': PharmacySession.pharmacyId,
       });
 
-      // 2. Deduct stock
+      // Deduct stock
       final int currentQty = (medicine['quantity'] as int?) ?? 0;
       int newQty;
 
@@ -472,7 +476,6 @@ class _SellMedicinePageState extends State<SellMedicinePage> {
 
       if (!mounted) return;
 
-      // 3. Show receipt
       _showReceipt(
         medicineName: medicineName,
         genericName: genericName,
@@ -484,7 +487,6 @@ class _SellMedicinePageState extends State<SellMedicinePage> {
         customer: customer,
       );
 
-      // 4. Refresh both lists
       _loadMedicines();
       _loadTopMedicines();
     } catch (e) {
@@ -509,9 +511,17 @@ class _SellMedicinePageState extends State<SellMedicinePage> {
     final String dateStr =
         "${now.day.toString().padLeft(2, '0')}/"
         "${now.month.toString().padLeft(2, '0')}/"
-        "${now.year}  "
-        "${now.hour.toString().padLeft(2, '0')}:"
-        "${now.minute.toString().padLeft(2, '0')}";
+        "${now.year}";
+    final int hour = now.hour;
+    final String period = hour >= 12 ? 'PM' : 'AM';
+    final int hour12 = hour == 0
+        ? 12
+        : hour > 12
+        ? hour - 12
+        : hour;
+    final String timeStr =
+        "${hour12.toString().padLeft(2, '0')}:"
+        "${now.minute.toString().padLeft(2, '0')} $period";
 
     showDialog(
       context: context,
@@ -531,91 +541,123 @@ class _SellMedicinePageState extends State<SellMedicinePage> {
             ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Store header
-            const Icon(
-              Icons.local_pharmacy_rounded,
-              color: Colors.blueAccent,
-              size: 36,
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              "GuardianPharma",
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Store header
+              Center(
+                child: Column(
+                  children: [
+                    const Icon(
+                      Icons.local_pharmacy_rounded,
+                      color: Colors.blueAccent,
+                      size: 36,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      PharmacySession.pharmacyName ?? "GuardianPharma",
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+                    if (PharmacySession.licenseNumber != null)
+                      Text(
+                        "License: ${PharmacySession.licenseNumber}",
+                        style: const TextStyle(
+                          color: Colors.white38,
+                          fontSize: 11,
+                        ),
+                      ),
+                    const SizedBox(height: 2),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          dateStr,
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          timeStr,
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (customer.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        "Customer: $customer",
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
-            ),
-            Text(
-              dateStr,
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
-            ),
 
-            if (customer.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                "Customer: $customer",
-                style: const TextStyle(color: Colors.white70, fontSize: 13),
+              const SizedBox(height: 14),
+              const Divider(color: Colors.white24),
+
+              _infoRow("💊 Medicine", medicineName),
+              if (genericName.isNotEmpty) _infoRow("🧬 Generic", genericName),
+              _infoRow("🔢 Batch", batchNumber),
+              _infoRow("📦 Type", saleType.toUpperCase()),
+              _infoRow("🔢 Quantity", "$qty"),
+              _infoRow("💰 Unit Price", "BDT ${unitPrice.toStringAsFixed(2)}"),
+
+              const Divider(color: Colors.white24),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    "TOTAL",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                  Text(
+                    "BDT ${total.toStringAsFixed(2)}",
+                    style: const TextStyle(
+                      color: Colors.greenAccent,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 20,
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 14),
+              const Center(
+                child: Text(
+                  "✅ Sale saved successfully!\nThank you for using GuardianPharma.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white38, fontSize: 12),
+                ),
               ),
             ],
-
-            const SizedBox(height: 14),
-            const Divider(color: Colors.white24),
-
-            // Medicine details
-            _infoRow("💊 Medicine", medicineName),
-            if (genericName.isNotEmpty) _infoRow("🧬 Generic", genericName),
-            _infoRow("🔢 Batch", batchNumber),
-            _infoRow("📦 Type", saleType.toUpperCase()),
-            _infoRow("🔢 Quantity", "$qty"),
-            _infoRow("💰 Unit Price", "BDT ${unitPrice.toStringAsFixed(2)}"),
-
-            const Divider(color: Colors.white24),
-
-            // Total
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  "TOTAL",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                  ),
-                ),
-                Text(
-                  "BDT ${total.toStringAsFixed(2)}",
-                  style: const TextStyle(
-                    color: Colors.greenAccent,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 22,
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 12),
-            const Text(
-              "✅ Sale saved successfully!",
-              style: TextStyle(color: Colors.white38, fontSize: 12),
-            ),
-          ],
+          ),
         ),
         actions: [
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blueAccent,
-              ),
-              icon: const Icon(Icons.check, color: Colors.white),
-              label: const Text("Done", style: TextStyle(color: Colors.white)),
-              onPressed: () => Navigator.pop(context),
-            ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+            icon: const Icon(Icons.check, color: Colors.white),
+            label: const Text("Done", style: TextStyle(color: Colors.white)),
+            onPressed: () => Navigator.pop(context),
           ),
         ],
       ),
@@ -700,7 +742,6 @@ class _SellMedicinePageState extends State<SellMedicinePage> {
     return Scaffold(
       body: Stack(
         children: [
-          // Background
           Positioned.fill(
             child: Image.asset(
               'assets/images/guardianpharmapills.jpg',
@@ -714,7 +755,7 @@ class _SellMedicinePageState extends State<SellMedicinePage> {
           SafeArea(
             child: Column(
               children: [
-                // ── TOP BAR ──────────────────────────
+                // TOP BAR
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(
@@ -739,7 +780,7 @@ class _SellMedicinePageState extends State<SellMedicinePage> {
                   ),
                 ),
 
-                // ── SEARCH + SCAN ─────────────────────
+                // SEARCH + SCAN
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
@@ -785,7 +826,7 @@ class _SellMedicinePageState extends State<SellMedicinePage> {
 
                 const SizedBox(height: 10),
 
-                // ── WEEKLY TOP MEDICINES ──────────────
+                // WEEKLY TOP MEDICINES
                 if (!loadingTop && topMedicines.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -876,7 +917,7 @@ class _SellMedicinePageState extends State<SellMedicinePage> {
                     ),
                   ),
 
-                // ── INFO HINT ─────────────────────────
+                // INFO HINT
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Container(
@@ -910,7 +951,7 @@ class _SellMedicinePageState extends State<SellMedicinePage> {
 
                 const SizedBox(height: 10),
 
-                // ── MEDICINE LIST ─────────────────────
+                // MEDICINE LIST
                 Expanded(
                   child: loading
                       ? const Center(
@@ -955,8 +996,6 @@ class _SellMedicinePageState extends State<SellMedicinePage> {
                                 daysLeft != null &&
                                 daysLeft <= 30 &&
                                 daysLeft >= 0;
-
-                            // check if this medicine is in top list
                             final bool isTopSeller = topMedicines.any(
                               (t) =>
                                   t['medicine_name']

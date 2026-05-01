@@ -1,5 +1,9 @@
+// ============================================================
+// substitute_finder_page.dart  –  pharmacy-scoped
+// ============================================================
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:guardianpharma/pharmacy_wrapper_page.dart';
 
 class SubstituteFinderPage extends StatefulWidget {
   const SubstituteFinderPage({super.key});
@@ -18,9 +22,7 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
   Map<String, dynamic>? searchedMedicine;
   List<Map<String, dynamic>> substitutes = [];
 
-  // =========================
-  // SEARCH MEDICINE
-  // =========================
+  // ✅ Search scoped to current pharmacy
   Future<void> _searchMedicine(String query) async {
     if (query.trim().isEmpty) return;
 
@@ -32,10 +34,11 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
     });
 
     try {
-      // Step 1: Find the medicine by name or generic name
+      // Step 1: Find medicine within this pharmacy
       final res = await supabase
           .from('medicine_boxes')
           .select('*, cartons(*, manufacturers(name, country))')
+          .eq('pharmacy_id', PharmacySession.pharmacyId ?? '')
           .or('medicine_name.ilike.%$query%,generic_name.ilike.%$query%')
           .order('medicine_name')
           .limit(1)
@@ -53,7 +56,6 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
 
       setState(() => searchedMedicine = res);
 
-      // Step 2: Get the generic name
       final String? genericName = res['generic_name']?.toString();
 
       if (genericName == null || genericName.trim().isEmpty) {
@@ -65,20 +67,19 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
         return;
       }
 
-      // Step 3: Find substitutes —
-      // same generic name, different manufacturer, quantity > 0
       final String currentManufacturer =
           res['cartons']?['manufacturers']?['name']?.toString() ?? '';
 
+      // ✅ Substitutes also scoped to same pharmacy, different manufacturer
       final subRes = await supabase
           .from('medicine_boxes')
           .select('*, cartons(*, manufacturers(name, country))')
+          .eq('pharmacy_id', PharmacySession.pharmacyId ?? '')
           .ilike('generic_name', '%$genericName%')
           .neq('id', res['id'])
           .gt('quantity', 0)
           .order('medicine_name');
 
-      // Filter out same manufacturer
       final List<Map<String, dynamic>> allSubs =
           List<Map<String, dynamic>>.from(subRes);
 
@@ -101,9 +102,6 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
     }
   }
 
-  // =========================
-  // MEDICINE DETAIL BOTTOM SHEET
-  // =========================
   void _showDetail(Map<String, dynamic> m) {
     final int qty = (m['quantity'] as int?) ?? 0;
     final String name = m['medicine_name']?.toString() ?? '';
@@ -143,13 +141,12 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // HEADER
               Row(
                 children: [
-                  CircleAvatar(
-                    backgroundColor: Colors.greenAccent.withOpacity(0.2),
+                  const CircleAvatar(
+                    backgroundColor: Color(0x33A5D6A7),
                     radius: 24,
-                    child: const Icon(
+                    child: Icon(
                       Icons.medication,
                       color: Colors.greenAccent,
                       size: 24,
@@ -181,23 +178,17 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
                   ),
                 ],
               ),
-
               const SizedBox(height: 16),
               const Divider(color: Colors.white24),
-
               _detailSection("🏭 Manufacturer"),
               _detailRow("Name", manufacturer),
               _detailRow("Country", country),
-
               const SizedBox(height: 12),
-
               _detailSection("💊 Medicine Info"),
               _detailRow("Batch Number", batch),
               _detailRow("Unit Type", unit),
               _detailRow("Strips per Box", stripsPerBox.toString()),
-
               const SizedBox(height: 12),
-
               _detailSection("📦 Stock"),
               _detailRow(
                 "Quantity",
@@ -208,9 +199,7 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
                     ? Colors.orange
                     : Colors.redAccent,
               ),
-
               const SizedBox(height: 12),
-
               _detailSection("💰 Pricing"),
               _detailRow("Price per Box", "BDT ${price.toStringAsFixed(2)}"),
               if (pricePerStrip != null)
@@ -218,9 +207,7 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
                   "Price per Strip",
                   "BDT ${pricePerStrip.toStringAsFixed(2)}",
                 ),
-
               const SizedBox(height: 12),
-
               _detailSection("📅 Expiry"),
               _detailRow(
                 "Expiry Date",
@@ -235,9 +222,7 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
                     ? Colors.orange
                     : Colors.greenAccent,
               ),
-
               const SizedBox(height: 20),
-
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -315,7 +300,6 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
     return Scaffold(
       body: Stack(
         children: [
-          // BACKGROUND
           Positioned.fill(
             child: Image.asset(
               'assets/images/guardianpharmapills.jpg',
@@ -325,11 +309,9 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
           Positioned.fill(
             child: Container(color: Colors.black.withOpacity(0.45)),
           ),
-
           SafeArea(
             child: Column(
               children: [
-                // TOP BAR
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(
@@ -354,7 +336,7 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
                   ),
                 ),
 
-                // INFO BOX
+                // Info + pharmacy badge
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Container(
@@ -366,18 +348,18 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
                         color: Colors.blueAccent.withOpacity(0.4),
                       ),
                     ),
-                    child: const Row(
+                    child: Row(
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.info_outline,
                           color: Colors.blueAccent,
                           size: 18,
                         ),
-                        SizedBox(width: 10),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            "Search a medicine name or generic name to find substitutes from different manufacturers.",
-                            style: TextStyle(
+                            "Searching substitutes in ${PharmacySession.pharmacyName ?? 'Your Pharmacy'} — same generic, different manufacturer.",
+                            style: const TextStyle(
                               color: Colors.white70,
                               fontSize: 13,
                             ),
@@ -390,7 +372,6 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
 
                 const SizedBox(height: 12),
 
-                // SEARCH BAR
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
@@ -446,20 +427,19 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
 
                 const SizedBox(height: 16),
 
-                // RESULTS
                 Expanded(
                   child: !searched
                       ? Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
+                            children: const [
                               Icon(
                                 Icons.saved_search,
                                 color: Colors.white24,
                                 size: 80,
                               ),
-                              const SizedBox(height: 16),
-                              const Text(
+                              SizedBox(height: 16),
+                              Text(
                                 "Search for a medicine\nto find substitutes",
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
@@ -475,7 +455,6 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // SEARCHED MEDICINE CARD
                               if (searchedMedicine == null)
                                 Container(
                                   padding: const EdgeInsets.all(16),
@@ -493,7 +472,7 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
                                       SizedBox(width: 10),
                                       Expanded(
                                         child: Text(
-                                          "❌ Medicine not found!\nCheck the name and try again.",
+                                          "❌ Medicine not found in this pharmacy!\nCheck the name and try again.",
                                           style: TextStyle(
                                             color: Colors.redAccent,
                                             fontWeight: FontWeight.bold,
@@ -504,7 +483,6 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
                                   ),
                                 )
                               else ...[
-                                // SEARCHED MEDICINE
                                 const Text(
                                   "🔍 Searched Medicine",
                                   style: TextStyle(
@@ -518,10 +496,7 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
                                   searchedMedicine!,
                                   isSearched: true,
                                 ),
-
                                 const SizedBox(height: 20),
-
-                                // SUBSTITUTES
                                 Row(
                                   children: [
                                     const Text(
@@ -556,7 +531,6 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
                                   ],
                                 ),
                                 const SizedBox(height: 8),
-
                                 if (substitutes.isEmpty)
                                   Container(
                                     padding: const EdgeInsets.all(16),
@@ -588,7 +562,7 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
                                           searchedMedicine!['generic_name'] ==
                                                   null
                                               ? "This medicine has no generic name recorded. Add a generic name in Carton Tracking to enable substitute finding."
-                                              : "No in-stock substitutes found with the same generic name from a different manufacturer.",
+                                              : "No in-stock substitutes found with the same generic name from a different manufacturer in this pharmacy.",
                                           textAlign: TextAlign.center,
                                           style: const TextStyle(
                                             color: Colors.white54,
@@ -603,7 +577,6 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
                                     (s) => _buildMedicineCard(s),
                                   ),
                               ],
-
                               const SizedBox(height: 20),
                             ],
                           ),
@@ -617,9 +590,6 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
     );
   }
 
-  // =========================
-  // MEDICINE CARD
-  // =========================
   Widget _buildMedicineCard(Map<String, dynamic> m, {bool isSearched = false}) {
     final int qty = (m['quantity'] as int?) ?? 0;
     final String name = m['medicine_name']?.toString() ?? '';
@@ -639,7 +609,6 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
     Color stockColor;
     String stockLabel;
     IconData stockIcon;
-
     if (qty <= 0) {
       stockColor = Colors.redAccent;
       stockLabel = "Out of Stock";
@@ -674,7 +643,6 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // NAME + STOCK BADGE
             Row(
               children: [
                 Expanded(
@@ -728,12 +696,9 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
                 ),
               ],
             ),
-
             const SizedBox(height: 10),
             const Divider(color: Colors.white12),
             const SizedBox(height: 6),
-
-            // DETAILS
             Row(
               children: [
                 Expanded(child: _cardDetail("🏭 Manufacturer", manufacturer)),
@@ -772,7 +737,6 @@ class _SubstituteFinderPageState extends State<SubstituteFinderPage> {
                   ? Colors.orange
                   : Colors.greenAccent,
             ),
-
             const SizedBox(height: 8),
             const Row(
               mainAxisAlignment: MainAxisAlignment.end,
