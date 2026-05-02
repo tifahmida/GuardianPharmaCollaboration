@@ -37,6 +37,7 @@ dependencies:
   google_fonts: ^8.0.2
   supabase_flutter: ^2.12.4
   flutter_barcode_scanner: ^2.0.0
+  flutter_launcher_icons: ^0.14.4
 
 dev_dependencies:
   flutter_test:
@@ -89,3 +90,4 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+  # This should have NO spaces before it

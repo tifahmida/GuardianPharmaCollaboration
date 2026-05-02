@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:guardianpharma/login_page.dart';
+import 'package:guardianpharma/violation_logs_page.dart';
+import 'package:guardianpharma/suspicious_activity_page.dart';
+import 'package:guardianpharma/audit_reports_page.dart';
+import 'package:guardianpharma/pharmacy_verification_page.dart';
+import 'package:guardianpharma/medicine_traceability_page.dart';
+import 'package:guardianpharma/stock_authenticity_page.dart';
 
 class RegulatoryHome extends StatefulWidget {
   const RegulatoryHome({super.key});
@@ -92,7 +98,10 @@ class _RegulatoryHomeState extends State<RegulatoryHome> {
                   context,
                   MaterialPageRoute(builder: (_) => const MyLogin()),
                 ),
-                child: const Text("Go Back to Login"),
+                child: const Text(
+                  "Go Back to Login",
+                  style: TextStyle(color: Colors.white),
+                ),
               ),
             ],
           ),
@@ -123,7 +132,7 @@ class _RegulatoryHomeState extends State<RegulatoryHome> {
                       _headerBox(),
                       const SizedBox(height: 16),
 
-                      // ── PHARMACY MANAGEMENT ───
+                      // ── PHARMACY MANAGEMENT ──────────────
                       _section("🏥 Pharmacy Management"),
                       _tile(
                         context,
@@ -154,7 +163,7 @@ class _RegulatoryHomeState extends State<RegulatoryHome> {
 
                       const SizedBox(height: 12),
 
-                      // ── MONITORING ────────────
+                      // ── MONITORING ───────────────────────
                       _section("📊 Monitoring & Audit"),
                       _tile(
                         context,
@@ -162,6 +171,12 @@ class _RegulatoryHomeState extends State<RegulatoryHome> {
                         Icons.report,
                         subtitle: "View flagged violations",
                         color: Colors.redAccent,
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ViolationLogsPage(),
+                          ),
+                        ),
                       ),
                       _tile(
                         context,
@@ -169,6 +184,12 @@ class _RegulatoryHomeState extends State<RegulatoryHome> {
                         Icons.warning,
                         subtitle: "Monitor unusual patterns",
                         color: Colors.orange,
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const SuspiciousActivityPage(),
+                          ),
+                        ),
                       ),
                       _tile(
                         context,
@@ -176,18 +197,30 @@ class _RegulatoryHomeState extends State<RegulatoryHome> {
                         Icons.description,
                         subtitle: "Full compliance reports",
                         color: Colors.purple,
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const AuditReportsPage(),
+                          ),
+                        ),
                       ),
 
                       const SizedBox(height: 12),
 
-                      // ── COMPLIANCE ────────────
-                      _section("🏥 Compliance & Verification"),
+                      // ── COMPLIANCE ───────────────────────
+                      _section("🔍 Compliance & Verification"),
                       _tile(
                         context,
                         "Pharmacy Verification",
                         Icons.verified,
-                        subtitle: "Verify pharmacy licenses",
+                        subtitle: "Approve or reject pharmacy licenses",
                         color: Colors.teal,
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const PharmacyVerificationPage(),
+                          ),
+                        ),
                       ),
                       _tile(
                         context,
@@ -195,13 +228,25 @@ class _RegulatoryHomeState extends State<RegulatoryHome> {
                         Icons.track_changes,
                         subtitle: "Track medicine supply chain",
                         color: Colors.cyan,
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const MedicineTraceabilityPage(),
+                          ),
+                        ),
                       ),
                       _tile(
                         context,
                         "Stock Authenticity Check",
                         Icons.fact_check,
-                        subtitle: "Verify stock authenticity",
+                        subtitle: "Verify batch is registered & genuine",
                         color: Colors.amber,
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const StockAuthenticityPage(),
+                          ),
+                        ),
                       ),
 
                       const SizedBox(height: 20),
@@ -216,19 +261,26 @@ class _RegulatoryHomeState extends State<RegulatoryHome> {
     );
   }
 
+  // ✅ Logo added beside GuardianPharma
   Widget _topBar(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text(
-            "GuardianPharma",
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+          const Row(
+            children: [
+              Icon(Icons.local_pharmacy, color: Colors.white, size: 24),
+              SizedBox(width: 8),
+              Text(
+                "GuardianPharma",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
           ),
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
@@ -336,7 +388,6 @@ class _RegulatoryHomeState extends State<RegulatoryHome> {
 
 // =========================
 // ALL PHARMACIES PAGE
-// View, edit, delete, toggle active
 // =========================
 class _AllPharmaciesPage extends StatefulWidget {
   const _AllPharmaciesPage();
@@ -518,7 +569,6 @@ class _AllPharmaciesPageState extends State<_AllPharmaciesPage> {
   void _error(String msg) => ScaffoldMessenger.of(
     context,
   ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
-
   void _success(String msg) => ScaffoldMessenger.of(
     context,
   ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.green));
@@ -540,7 +590,6 @@ class _AllPharmaciesPageState extends State<_AllPharmaciesPage> {
           SafeArea(
             child: Column(
               children: [
-                // TOP BAR
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(
@@ -580,8 +629,6 @@ class _AllPharmaciesPageState extends State<_AllPharmaciesPage> {
                     ],
                   ),
                 ),
-
-                // SUMMARY
                 if (!loading)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -607,10 +654,7 @@ class _AllPharmaciesPageState extends State<_AllPharmaciesPage> {
                       ],
                     ),
                   ),
-
                 const SizedBox(height: 12),
-
-                // LIST
                 Expanded(
                   child: loading
                       ? const Center(
@@ -631,7 +675,7 @@ class _AllPharmaciesPageState extends State<_AllPharmaciesPage> {
                           itemBuilder: (_, i) {
                             final p = pharmacies[i];
                             final bool isActive = p['is_active'] == true;
-
+                            final bool isVerified = p['is_verified'] == true;
                             return Container(
                               margin: const EdgeInsets.only(bottom: 12),
                               padding: const EdgeInsets.all(14),
@@ -704,46 +748,74 @@ class _AllPharmaciesPageState extends State<_AllPharmaciesPage> {
                                           ],
                                         ),
                                       ),
-                                      // Status badge
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: isActive
-                                              ? Colors.greenAccent.withOpacity(
-                                                  0.15,
-                                                )
-                                              : Colors.redAccent.withOpacity(
-                                                  0.15,
-                                                ),
-                                          borderRadius: BorderRadius.circular(
-                                            8,
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.end,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: isActive
+                                                  ? Colors.greenAccent
+                                                        .withOpacity(0.15)
+                                                  : Colors.redAccent
+                                                        .withOpacity(0.15),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            ),
+                                            child: Text(
+                                              isActive ? "Active" : "Inactive",
+                                              style: TextStyle(
+                                                color: isActive
+                                                    ? Colors.greenAccent
+                                                    : Colors.redAccent,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
                                           ),
-                                        ),
-                                        child: Text(
-                                          isActive ? "Active" : "Inactive",
-                                          style: TextStyle(
-                                            color: isActive
-                                                ? Colors.greenAccent
-                                                : Colors.redAccent,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
+                                          const SizedBox(height: 4),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: isVerified
+                                                  ? Colors.teal.withOpacity(
+                                                      0.15,
+                                                    )
+                                                  : Colors.orange.withOpacity(
+                                                      0.15,
+                                                    ),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            ),
+                                            child: Text(
+                                              isVerified
+                                                  ? "✓ Verified"
+                                                  : "Pending",
+                                              style: TextStyle(
+                                                color: isVerified
+                                                    ? Colors.teal
+                                                    : Colors.orange,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
                                           ),
-                                        ),
+                                        ],
                                       ),
                                     ],
                                   ),
-
                                   const SizedBox(height: 12),
                                   const Divider(color: Colors.white12),
                                   const SizedBox(height: 8),
-
-                                  // ACTION BUTTONS
                                   Row(
                                     children: [
-                                      // Edit
                                       Expanded(
                                         child: OutlinedButton.icon(
                                           style: OutlinedButton.styleFrom(
@@ -764,7 +836,6 @@ class _AllPharmaciesPageState extends State<_AllPharmaciesPage> {
                                         ),
                                       ),
                                       const SizedBox(width: 8),
-                                      // Toggle Active
                                       Expanded(
                                         child: OutlinedButton.icon(
                                           style: OutlinedButton.styleFrom(
@@ -795,7 +866,6 @@ class _AllPharmaciesPageState extends State<_AllPharmaciesPage> {
                                         ),
                                       ),
                                       const SizedBox(width: 8),
-                                      // Delete
                                       OutlinedButton(
                                         style: OutlinedButton.styleFrom(
                                           foregroundColor: Colors.redAccent,
@@ -862,7 +932,6 @@ class _AllPharmaciesPageState extends State<_AllPharmaciesPage> {
 
 // =========================
 // ADD PHARMACY PAGE
-// Regulatory can add new pharmacies
 // =========================
 class _AddPharmacyPage extends StatefulWidget {
   const _AddPharmacyPage();
@@ -894,7 +963,6 @@ class _AddPharmacyPageState extends State<_AddPharmacyPage> {
   Future<void> _save() async {
     final name = nameController.text.trim();
     final license = licenseController.text.trim();
-
     if (name.isEmpty) {
       _error("Pharmacy name is required");
       return;
@@ -903,7 +971,6 @@ class _AddPharmacyPageState extends State<_AddPharmacyPage> {
       _error("License number is required");
       return;
     }
-
     setState(() => saving = true);
     try {
       await supabase.from('pharmacies').insert({
@@ -919,6 +986,7 @@ class _AddPharmacyPageState extends State<_AddPharmacyPage> {
             ? null
             : ownerController.text.trim(),
         'is_active': true,
+        'is_verified': false,
       });
       _success("Pharmacy added successfully!");
       if (mounted) Navigator.pop(context);
@@ -931,7 +999,6 @@ class _AddPharmacyPageState extends State<_AddPharmacyPage> {
   void _error(String msg) => ScaffoldMessenger.of(
     context,
   ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
-
   void _success(String msg) => ScaffoldMessenger.of(
     context,
   ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.green));
@@ -977,7 +1044,6 @@ class _AddPharmacyPageState extends State<_AddPharmacyPage> {
           SafeArea(
             child: Column(
               children: [
-                // TOP BAR
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(
@@ -1001,13 +1067,11 @@ class _AddPharmacyPageState extends State<_AddPharmacyPage> {
                     ],
                   ),
                 ),
-
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
-                        // INFO
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
@@ -1037,9 +1101,7 @@ class _AddPharmacyPageState extends State<_AddPharmacyPage> {
                             ],
                           ),
                         ),
-
                         const SizedBox(height: 20),
-
                         _field(
                           nameController,
                           "Pharmacy Name *",
@@ -1070,9 +1132,7 @@ class _AddPharmacyPageState extends State<_AddPharmacyPage> {
                           "Owner Name (optional)",
                           Icons.person_outline,
                         ),
-
                         const SizedBox(height: 28),
-
                         SizedBox(
                           width: double.infinity,
                           height: 52,
@@ -1104,7 +1164,6 @@ class _AddPharmacyPageState extends State<_AddPharmacyPage> {
                             ),
                           ),
                         ),
-
                         const SizedBox(height: 20),
                       ],
                     ),
