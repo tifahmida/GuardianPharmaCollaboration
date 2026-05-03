@@ -11,25 +11,30 @@ class PharmacyVerificationPage extends StatefulWidget {
 
 class _PharmacyVerificationPageState extends State<PharmacyVerificationPage> {
   final supabase = Supabase.instance.client;
-
   List<Map<String, dynamic>> pharmacies = [];
   bool loading = true;
-
   String selectedFilter = 'Pending';
   final List<String> filters = ['Pending', 'Verified', 'Rejected', 'All'];
 
   @override
   void initState() {
     super.initState();
-    _loadPharmacies();
+    _load();
   }
 
-  // ===============================
-  // LOAD PHARMACIES
-  // ===============================
-  Future<void> _loadPharmacies() async {
-    setState(() => loading = true);
+  // =========================
+  // HELPER — get status
+  // avoids repeated null checks
+  // =========================
+  String _status(Map<String, dynamic> p) {
+    final val = p['is_verified'];
+    if (val == true) return 'verified';
+    if (val == false) return 'rejected';
+    return 'pending';
+  }
 
+  Future<void> _load() async {
+    setState(() => loading = true);
     try {
       final res = await supabase
           .from('pharmacies')
@@ -39,11 +44,11 @@ class _PharmacyVerificationPageState extends State<PharmacyVerificationPage> {
       List<Map<String, dynamic>> all = List<Map<String, dynamic>>.from(res);
 
       if (selectedFilter == 'Pending') {
-        all = all.where((p) => p['is_verified'] == null).toList();
+        all = all.where((p) => _status(p) == 'pending').toList();
       } else if (selectedFilter == 'Verified') {
-        all = all.where((p) => p['is_verified'] == true).toList();
+        all = all.where((p) => _status(p) == 'verified').toList();
       } else if (selectedFilter == 'Rejected') {
-        all = all.where((p) => p['is_verified'] == false).toList();
+        all = all.where((p) => _status(p) == 'rejected').toList();
       }
 
       setState(() {
@@ -51,17 +56,13 @@ class _PharmacyVerificationPageState extends State<PharmacyVerificationPage> {
         loading = false;
       });
     } catch (e) {
-      _error("Failed to load pharmacies");
+      _err("Failed to load pharmacies");
       setState(() => loading = false);
     }
   }
 
-  // ===============================
-  // APPROVE / REJECT
-  // ===============================
   Future<void> _verify(Map<String, dynamic> p, bool approve) async {
     final action = approve ? "Approve" : "Reject";
-
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -71,7 +72,8 @@ class _PharmacyVerificationPageState extends State<PharmacyVerificationPage> {
           style: const TextStyle(color: Colors.white),
         ),
         content: Text(
-          "$action \"${p['name']}\"?",
+          "$action \"${p['name']}\"?\n\n"
+          "${approve ? '✅ This pharmacy will be marked as verified.' : '❌ This pharmacy will be marked as rejected.'}",
           style: const TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -89,13 +91,15 @@ class _PharmacyVerificationPageState extends State<PharmacyVerificationPage> {
             onPressed: () => Navigator.pop(context, true),
             child: Text(
               action,
-              style: TextStyle(color: approve ? Colors.black : Colors.white),
+              style: TextStyle(
+                color: approve ? Colors.black : Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ],
       ),
     );
-
     if (confirm != true) return;
 
     try {
@@ -103,28 +107,20 @@ class _PharmacyVerificationPageState extends State<PharmacyVerificationPage> {
           .from('pharmacies')
           .update({'is_verified': approve})
           .eq('id', p['id']);
-
-      _success(
-        approve ? "Pharmacy approved successfully" : "Pharmacy rejected",
-      );
-
-      _loadPharmacies();
+      _ok(approve ? "✅ Pharmacy approved!" : "❌ Pharmacy rejected");
+      _load();
     } catch (e) {
-      _error("Failed to update status");
+      _err("Failed to update status");
     }
   }
 
-  // ===============================
-  // CANCEL VERIFICATION
-  // Back to Pending
-  // ===============================
   Future<void> _cancelVerification(Map<String, dynamic> p) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: const Color(0xFF1E1E2E),
         title: const Text(
-          "Cancel Verification",
+          "Reset to Pending",
           style: TextStyle(color: Colors.white),
         ),
         content: Text(
@@ -139,43 +135,96 @@ class _PharmacyVerificationPageState extends State<PharmacyVerificationPage> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text("Yes", style: TextStyle(color: Colors.white)),
+            child: const Text(
+              "Yes, Reset",
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
     );
-
     if (confirm != true) return;
 
     try {
+      // ✅ set to null = pending
       await supabase
           .from('pharmacies')
           .update({'is_verified': null})
           .eq('id', p['id']);
-
-      _success("Verification cancelled");
-
-      _loadPharmacies();
+      _ok("Status reset to Pending");
+      _load();
     } catch (e) {
-      _error("Failed to cancel verification");
+      _err("Failed to reset status");
     }
   }
 
-  void _success(String msg) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.green));
+  Color _filterColor(String f) {
+    switch (f) {
+      case 'Verified':
+        return Colors.tealAccent;
+      case 'Rejected':
+        return Colors.redAccent;
+      case 'Pending':
+        return Colors.orange;
+      default:
+        return Colors.blueAccent;
+    }
   }
 
-  void _error(String msg) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'verified':
+        return Colors.tealAccent;
+      case 'rejected':
+        return Colors.redAccent;
+      default:
+        return Colors.orange;
+    }
   }
 
-  // ===============================
-  // UI
-  // ===============================
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'verified':
+        return '✅ Verified';
+      case 'rejected':
+        return '❌ Rejected';
+      default:
+        return '⏳ Pending';
+    }
+  }
+
+  IconData _statusIcon(String status) {
+    switch (status) {
+      case 'verified':
+        return Icons.verified;
+      case 'rejected':
+        return Icons.cancel_outlined;
+      default:
+        return Icons.pending_outlined;
+    }
+  }
+
+  int _count(String type) {
+    switch (type) {
+      case 'Pending':
+        return pharmacies.where((p) => _status(p) == 'pending').length;
+      case 'Verified':
+        return pharmacies.where((p) => _status(p) == 'verified').length;
+      case 'Rejected':
+        return pharmacies.where((p) => _status(p) == 'rejected').length;
+      default:
+        return pharmacies.length;
+    }
+  }
+
+  void _ok(String msg) => ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.green));
+
+  void _err(String msg) => ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -187,24 +236,29 @@ class _PharmacyVerificationPageState extends State<PharmacyVerificationPage> {
               fit: BoxFit.cover,
             ),
           ),
-
           Positioned.fill(
             child: Container(color: Colors.black.withOpacity(0.45)),
           ),
-
           SafeArea(
             child: Column(
               children: [
-                // HEADER
+                // TOP BAR
                 Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   child: Row(
                     children: [
                       IconButton(
                         icon: const Icon(Icons.arrow_back, color: Colors.white),
                         onPressed: () => Navigator.pop(context),
                       ),
-                      const Icon(Icons.verified, color: Colors.teal),
+                      const Icon(
+                        Icons.verified,
+                        color: Colors.tealAccent,
+                        size: 24,
+                      ),
                       const SizedBox(width: 10),
                       const Expanded(
                         child: Text(
@@ -217,50 +271,89 @@ class _PharmacyVerificationPageState extends State<PharmacyVerificationPage> {
                         ),
                       ),
                       IconButton(
-                        onPressed: _loadPharmacies,
-                        icon: const Icon(Icons.refresh, color: Colors.white),
+                        icon: const Icon(Icons.refresh, color: Colors.white70),
+                        onPressed: _load,
                       ),
                     ],
                   ),
                 ),
 
-                // FILTERS
+                // SUMMARY STATS
+                if (!loading)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      children: [
+                        _statCard(
+                          "Total",
+                          "${pharmacies.length}",
+                          Colors.white70,
+                        ),
+                        const SizedBox(width: 8),
+                        _statCard(
+                          "Pending",
+                          "${_count('Pending')}",
+                          Colors.orange,
+                        ),
+                        const SizedBox(width: 8),
+                        _statCard(
+                          "Verified",
+                          "${_count('Verified')}",
+                          Colors.tealAccent,
+                        ),
+                        const SizedBox(width: 8),
+                        _statCard(
+                          "Rejected",
+                          "${_count('Rejected')}",
+                          Colors.redAccent,
+                        ),
+                      ],
+                    ),
+                  ),
+
+                const SizedBox(height: 12),
+
+                // FILTER CHIPS
                 SizedBox(
-                  height: 42,
+                  height: 40,
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     itemCount: filters.length,
                     itemBuilder: (_, i) {
                       final f = filters[i];
-                      final selected = selectedFilter == f;
-
+                      final isSelected = selectedFilter == f;
+                      final color = _filterColor(f);
                       return GestureDetector(
                         onTap: () {
-                          setState(() {
-                            selectedFilter = f;
-                          });
-                          _loadPharmacies();
+                          setState(() => selectedFilter = f);
+                          _load();
                         },
                         child: Container(
                           margin: const EdgeInsets.only(right: 8),
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16,
-                            vertical: 10,
+                            vertical: 8,
                           ),
                           decoration: BoxDecoration(
-                            color: selected
-                                ? Colors.teal
-                                : Colors.white.withOpacity(0.08),
+                            color: isSelected
+                                ? color.withOpacity(0.25)
+                                : Colors.white.withOpacity(0.07),
                             borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: isSelected
+                                  ? color
+                                  : Colors.white.withOpacity(0.15),
+                            ),
                           ),
                           child: Text(
                             f,
                             style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: selected
+                              color: isSelected ? color : Colors.white60,
+                              fontWeight: isSelected
                                   ? FontWeight.bold
                                   : FontWeight.normal,
+                              fontSize: 13,
                             ),
                           ),
                         ),
@@ -269,149 +362,281 @@ class _PharmacyVerificationPageState extends State<PharmacyVerificationPage> {
                   ),
                 ),
 
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
 
                 // LIST
                 Expanded(
                   child: loading
                       ? const Center(
-                          child: CircularProgressIndicator(color: Colors.teal),
+                          child: CircularProgressIndicator(
+                            color: Colors.tealAccent,
+                          ),
                         )
                       : pharmacies.isEmpty
-                      ? const Center(
-                          child: Text(
-                            "No pharmacies found",
-                            style: TextStyle(color: Colors.white54),
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.verified_outlined,
+                                color: _filterColor(
+                                  selectedFilter,
+                                ).withOpacity(0.4),
+                                size: 64,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                "No $selectedFilter pharmacies",
+                                style: const TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: 15,
+                                ),
+                              ),
+                            ],
                           ),
                         )
                       : ListView.builder(
-                          padding: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
                           itemCount: pharmacies.length,
                           itemBuilder: (_, i) {
                             final p = pharmacies[i];
 
-                            final bool isVerified = p['is_verified'] == true;
-
-                            final bool isRejected = p['is_verified'] == false;
-
-                            final bool isPending = p['is_verified'] == null;
+                            // ✅ use helper — no yellow warnings
+                            final String status = _status(p);
+                            final Color statusColor = _statusColor(status);
+                            final String statusLabel = _statusLabel(status);
+                            final IconData statusIcon = _statusIcon(status);
+                            final bool isPending = status == 'pending';
 
                             return Container(
                               margin: const EdgeInsets.only(bottom: 12),
-                              padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.08),
-                                borderRadius: BorderRadius.circular(14),
+                                color: Colors.white.withOpacity(0.07),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: statusColor.withOpacity(0.3),
+                                ),
                               ),
                               child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    p['name'] ?? '',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-
-                                  const SizedBox(height: 6),
-
-                                  Text(
-                                    "License: ${p['license_number'] ?? 'N/A'}",
-                                    style: const TextStyle(
-                                      color: Colors.white60,
-                                    ),
-                                  ),
-
-                                  const SizedBox(height: 10),
-
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 6,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: isVerified
-                                          ? Colors.teal.withOpacity(0.2)
-                                          : isRejected
-                                          ? Colors.red.withOpacity(0.2)
-                                          : Colors.orange.withOpacity(0.2),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Text(
-                                      isVerified
-                                          ? "✅ Verified"
-                                          : isRejected
-                                          ? "❌ Rejected"
-                                          : "⏳ Pending",
-                                      style: TextStyle(
-                                        color: isVerified
-                                            ? Colors.teal
-                                            : isRejected
-                                            ? Colors.redAccent
-                                            : Colors.orange,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-
-                                  const SizedBox(height: 12),
-
-                                  // ACTIONS
-                                  if (isPending)
-                                    Row(
+                                  // PHARMACY INFO
+                                  Padding(
+                                    padding: const EdgeInsets.all(14),
+                                    child: Row(
                                       children: [
-                                        Expanded(
-                                          child: ElevatedButton(
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor:
-                                                  Colors.greenAccent,
+                                        Container(
+                                          padding: const EdgeInsets.all(10),
+                                          decoration: BoxDecoration(
+                                            color: statusColor.withOpacity(
+                                              0.15,
                                             ),
-                                            onPressed: () => _verify(p, true),
-                                            child: const Text(
-                                              "Approve",
-                                              style: TextStyle(
-                                                color: Colors.black,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: statusColor.withOpacity(
+                                                0.3,
                                               ),
                                             ),
                                           ),
+                                          child: Icon(
+                                            statusIcon,
+                                            color: statusColor,
+                                            size: 22,
+                                          ),
                                         ),
-                                        const SizedBox(width: 10),
+                                        const SizedBox(width: 12),
                                         Expanded(
-                                          child: ElevatedButton(
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: Colors.redAccent,
-                                            ),
-                                            onPressed: () => _verify(p, false),
-                                            child: const Text(
-                                              "Reject",
-                                              style: TextStyle(
-                                                color: Colors.white,
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                p['name']?.toString() ?? '',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
                                               ),
+                                              const SizedBox(height: 3),
+                                              Text(
+                                                "🪪 ${p['license_number'] ?? 'N/A'}",
+                                                style: const TextStyle(
+                                                  color: Colors.white54,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                              if ((p['owner_name']
+                                                          ?.toString() ??
+                                                      '')
+                                                  .isNotEmpty)
+                                                Text(
+                                                  "👤 ${p['owner_name']}",
+                                                  style: const TextStyle(
+                                                    color: Colors.white38,
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              if ((p['address']?.toString() ??
+                                                      '')
+                                                  .isNotEmpty)
+                                                Text(
+                                                  "📍 ${p['address']}",
+                                                  style: const TextStyle(
+                                                    color: Colors.white38,
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                        // STATUS BADGE
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 5,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: statusColor.withOpacity(
+                                              0.15,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                            border: Border.all(
+                                              color: statusColor.withOpacity(
+                                                0.4,
+                                              ),
+                                            ),
+                                          ),
+                                          child: Text(
+                                            statusLabel,
+                                            style: TextStyle(
+                                              color: statusColor,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
                                             ),
                                           ),
                                         ),
                                       ],
                                     ),
+                                  ),
 
-                                  if (isVerified || isRejected)
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: OutlinedButton.icon(
-                                        style: OutlinedButton.styleFrom(
-                                          foregroundColor: Colors.orange,
-                                          side: const BorderSide(
-                                            color: Colors.orange,
-                                          ),
-                                        ),
-                                        onPressed: () => _cancelVerification(p),
-                                        icon: const Icon(Icons.undo),
-                                        label: const Text(
-                                          "Cancel Verification",
-                                        ),
-                                      ),
+                                  const Divider(
+                                    color: Colors.white12,
+                                    height: 1,
+                                  ),
+
+                                  // ACTION BUTTONS
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
                                     ),
+                                    child: isPending
+                                        ? Row(
+                                            children: [
+                                              Expanded(
+                                                child: ElevatedButton.icon(
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor:
+                                                        Colors.greenAccent,
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          vertical: 10,
+                                                        ),
+                                                    shape: RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            10,
+                                                          ),
+                                                    ),
+                                                  ),
+                                                  onPressed: () =>
+                                                      _verify(p, true),
+                                                  icon: const Icon(
+                                                    Icons.check_circle,
+                                                    color: Colors.black,
+                                                    size: 16,
+                                                  ),
+                                                  label: const Text(
+                                                    "Approve",
+                                                    style: TextStyle(
+                                                      color: Colors.black,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                child: OutlinedButton.icon(
+                                                  style: OutlinedButton.styleFrom(
+                                                    foregroundColor:
+                                                        Colors.redAccent,
+                                                    side: const BorderSide(
+                                                      color: Colors.redAccent,
+                                                    ),
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          vertical: 10,
+                                                        ),
+                                                    shape: RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            10,
+                                                          ),
+                                                    ),
+                                                  ),
+                                                  onPressed: () =>
+                                                      _verify(p, false),
+                                                  icon: const Icon(
+                                                    Icons.cancel,
+                                                    size: 16,
+                                                  ),
+                                                  label: const Text(
+                                                    "Reject",
+                                                    style: TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          )
+                                        : SizedBox(
+                                            width: double.infinity,
+                                            child: OutlinedButton.icon(
+                                              style: OutlinedButton.styleFrom(
+                                                foregroundColor: Colors.orange,
+                                                side: const BorderSide(
+                                                  color: Colors.orange,
+                                                ),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      vertical: 10,
+                                                    ),
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(10),
+                                                ),
+                                              ),
+                                              onPressed: () =>
+                                                  _cancelVerification(p),
+                                              icon: const Icon(
+                                                Icons.undo,
+                                                size: 16,
+                                              ),
+                                              label: const Text(
+                                                "Reset to Pending",
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                  ),
                                 ],
                               ),
                             );
@@ -422,6 +647,36 @@ class _PharmacyVerificationPageState extends State<PharmacyVerificationPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _statCard(String label, String value, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                color: color,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white54, fontSize: 10),
+            ),
+          ],
+        ),
       ),
     );
   }

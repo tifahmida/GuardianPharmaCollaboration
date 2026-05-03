@@ -39,7 +39,7 @@ class PharmacistHome extends StatelessWidget {
             ),
           ),
           Positioned.fill(
-            child: Container(color: Colors.black.withOpacity(0.40)),
+            child: Container(color: Colors.black.withOpacity(0.42)),
           ),
           SafeArea(
             child: Column(
@@ -167,7 +167,7 @@ class PharmacistHome extends StatelessWidget {
                       _tile(
                         context,
                         "Substitute Finder",
-                        Icons.search,
+                        Icons.find_replace,
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -190,17 +190,18 @@ class PharmacistHome extends StatelessWidget {
 
   // =========================
   // TOP BAR
+  // same style as regulatory
   // =========================
   Widget _topBar(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           const Row(
             children: [
-              Icon(Icons.local_pharmacy, color: Colors.white),
-              SizedBox(width: 10),
+              Icon(Icons.local_pharmacy, color: Colors.blueAccent, size: 26),
+              SizedBox(width: 8),
               Text(
                 "GuardianPharma",
                 style: TextStyle(
@@ -212,7 +213,7 @@ class PharmacistHome extends StatelessWidget {
             ],
           ),
           IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
+            icon: const Icon(Icons.logout, color: Colors.white70),
             tooltip: "Logout",
             onPressed: () => _logout(context),
           ),
@@ -223,90 +224,141 @@ class PharmacistHome extends StatelessWidget {
 
   // =========================
   // HEADER BOX
-  // ✅ Switch Pharmacy removed
+  // green gradient — matches
+  // regulatory blue-teal style
   // =========================
   Widget _headerBox() {
-    final String pharmacyName =
-        PharmacySession.pharmacyName ?? "GuardianPharma";
+    final String pharmacyName = PharmacySession.pharmacyName ?? "My Pharmacy";
+    final String licenseNumber = PharmacySession.licenseNumber ?? '';
+    final String address = PharmacySession.pharmacyAddress ?? '';
 
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
+      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white24),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1B5E20), Color(0xFF00695C)],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10),
+          BoxShadow(
+            color: Colors.greenAccent.withOpacity(0.20),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
         ],
       ),
-      child: Column(
+      child: Row(
         children: [
-          // PHARMACY NAME
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.local_pharmacy,
-                color: Colors.blueAccent,
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
+          // ICON CIRCLE
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withOpacity(0.25)),
+            ),
+            child: const Icon(
+              Icons.local_pharmacy_outlined,
+              color: Colors.white,
+              size: 26,
+            ),
+          ),
+
+          const SizedBox(width: 14),
+
+          // TEXT
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
                   pharmacyName,
-                  textAlign: TextAlign.center,
                   style: const TextStyle(
-                    color: Colors.blueAccent,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 3),
+                if (licenseNumber.isNotEmpty)
+                  Text(
+                    "🪪 $licenseNumber",
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                if (address.isNotEmpty)
+                  Text(
+                    "📍 $address",
+                    style: const TextStyle(color: Colors.white54, fontSize: 11),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    "PHARMACIST DASHBOARD",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 8),
 
-          // DASHBOARD TITLE
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.medical_services, color: Colors.greenAccent),
-              SizedBox(width: 10),
-              Text(
-                "PHARMACIST DASHBOARD",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                ),
-              ),
-            ],
-          ),
+          const Icon(Icons.chevron_right, color: Colors.white38),
         ],
       ),
     );
   }
 
   // =========================
-  // SECTION TITLE
+  // SECTION — matches regulatory
   // =========================
   Widget _section(String title) {
     return Padding(
       padding: const EdgeInsets.only(top: 12, bottom: 8),
-      child: Text(
-        title,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 15,
-          fontWeight: FontWeight.bold,
-        ),
+      child: Row(
+        children: [
+          Container(
+            width: 3,
+            height: 16,
+            decoration: BoxDecoration(
+              color: Colors.greenAccent,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
       ),
     );
   }
 
   // =========================
-  // TILE
+  // TILE — matches regulatory style
   // =========================
   Widget _tile(
     BuildContext context,
@@ -314,15 +366,36 @@ class PharmacistHome extends StatelessWidget {
     IconData icon, {
     VoidCallback? onTap,
   }) {
-    return Card(
-      color: Colors.white.withOpacity(0.12),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.07),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withOpacity(0.09)),
+      ),
       child: ListTile(
-        leading: Icon(icon, color: Colors.white),
-        title: Text(title, style: const TextStyle(color: Colors.white)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.greenAccent.withOpacity(0.13),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.greenAccent.withOpacity(0.22)),
+          ),
+          child: Icon(icon, color: Colors.greenAccent, size: 22),
+        ),
+        title: Text(
+          title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+          ),
+        ),
         trailing: const Icon(
           Icons.arrow_forward_ios,
           size: 14,
-          color: Colors.white,
+          color: Colors.white54,
         ),
         onTap: onTap,
       ),
